@@ -20,10 +20,10 @@ Tracks completion of the steps in `PLAN.md` §10.
 
 ## Step 2 — UsbTransport
 
-- [ ] `src/node/usb.ts`
-- [ ] `src/__tests__/usb.test.ts`
-- [ ] Gate: typecheck + lint + test + build
-- [ ] Commit + push
+- [x] `src/node/usb.ts`
+- [x] `src/__tests__/usb.test.ts`
+- [x] Gate: typecheck + lint + test + build
+- [x] Commit + push
 
 ## Step 3 — TcpTransport
 
