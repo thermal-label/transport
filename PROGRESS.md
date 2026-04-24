@@ -42,11 +42,11 @@ Tracks completion of the steps in `PLAN.md` §10.
 
 ## Step 5 — WebBluetoothTransport
 
-- [ ] `src/web/web-bluetooth.ts`
-- [ ] `src/web/index.ts`
-- [ ] `src/__tests__/web-bluetooth.test.ts`
-- [ ] Gate: typecheck + lint + test + build
-- [ ] Commit + push
+- [x] `src/web/web-bluetooth.ts`
+- [x] `src/web/index.ts`
+- [x] `src/__tests__/web-bluetooth.test.ts`
+- [x] Gate: typecheck + lint + test + build
+- [x] Commit + push
 
 ## Step 6 — Discovery helpers
 
