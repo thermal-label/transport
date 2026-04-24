@@ -35,10 +35,10 @@ Tracks completion of the steps in `PLAN.md` §10.
 
 ## Step 4 — WebUsbTransport
 
-- [ ] `src/web/webusb.ts`
-- [ ] `src/__tests__/webusb.test.ts`
-- [ ] Gate: typecheck + lint + test + build
-- [ ] Commit + push
+- [x] `src/web/webusb.ts`
+- [x] `src/__tests__/webusb.test.ts`
+- [x] Gate: typecheck + lint + test + build
+- [x] Commit + push
 
 ## Step 5 — WebBluetoothTransport
 
