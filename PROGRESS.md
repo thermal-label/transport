@@ -57,10 +57,10 @@ Tracks completion of the steps in `PLAN.md` §10.
 
 ## Step 7 — Root index
 
-- [ ] `src/index.ts` — discovery helpers ONLY (no transport classes)
-- [ ] Verify all three subpath exports emit correctly
-- [ ] Gate: typecheck + lint + test + build
-- [ ] Commit + push
+- [x] `src/index.ts` — discovery helpers ONLY (no transport classes)
+- [x] Verify all three subpath exports emit correctly
+- [x] Gate: typecheck + lint + test + build
+- [x] Commit + push
 
 ## Step 8 — README
 

@@ -1,4 +1,9 @@
-// Root entry is intentionally empty at scaffold time.
-// Step 7 wires it up with discovery helpers only — see PLAN.md §10 and
-// DECISIONS.md D1.
-export {};
+// Platform-neutral entry. See DECISIONS.md D1 — transport classes live
+// strictly behind `./node` and `./web` so browser bundles never see the
+// `usb` native addon.
+export {
+  buildBluetoothRequestOptions,
+  buildUsbFilters,
+  discoverAll,
+  matchDevice,
+} from './discovery.js';
