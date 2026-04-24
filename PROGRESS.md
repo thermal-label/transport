@@ -69,7 +69,7 @@ Tracks completion of the steps in `PLAN.md` §10.
 
 ## Step 9 — Final
 
-- [ ] `pnpm test:coverage` — thresholds green
-- [ ] All PROGRESS.md checkboxes ticked
+- [x] `pnpm test:coverage` — thresholds green (100 / 93.78 / 100 / 100)
+- [x] All PROGRESS.md checkboxes ticked
 - [ ] Publish to npm (operator — see BLOCKERS.md)
-- [ ] Commit + push
+- [x] Commit + push
