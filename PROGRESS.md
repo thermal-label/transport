@@ -50,10 +50,10 @@ Tracks completion of the steps in `PLAN.md` §10.
 
 ## Step 6 — Discovery helpers
 
-- [ ] `src/discovery.ts`
-- [ ] `src/__tests__/discovery.test.ts`
-- [ ] Gate: typecheck + lint + test + build
-- [ ] Commit + push
+- [x] `src/discovery.ts`
+- [x] `src/__tests__/discovery.test.ts`
+- [x] Gate: typecheck + lint + test + build
+- [x] Commit + push
 
 ## Step 7 — Root index
 
