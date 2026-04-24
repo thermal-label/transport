@@ -27,11 +27,11 @@ Tracks completion of the steps in `PLAN.md` §10.
 
 ## Step 3 — TcpTransport
 
-- [ ] `src/node/tcp.ts`
-- [ ] `src/node/index.ts`
-- [ ] `src/__tests__/tcp.test.ts`
-- [ ] Gate: typecheck + lint + test + build
-- [ ] Commit + push
+- [x] `src/node/tcp.ts`
+- [x] `src/node/index.ts`
+- [x] `src/__tests__/tcp.test.ts`
+- [x] Gate: typecheck + lint + test + build
+- [x] Commit + push
 
 ## Step 4 — WebUsbTransport
 
