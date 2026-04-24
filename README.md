@@ -4,11 +4,11 @@
 [![CI](https://github.com/thermal-label/transport/actions/workflows/ci.yml/badge.svg)](https://github.com/thermal-label/transport/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-USB, TCP, WebUSB, and Web Bluetooth transport classes for the
-`thermal-label` printer driver ecosystem. All four classes implement the
-`Transport` interface from [`@thermal-label/contracts`][contracts], so
-drivers program against one pull-based API regardless of the underlying
-channel.
+USB, TCP, Serial, WebUSB, Web Serial, and Web Bluetooth transport
+classes for the `thermal-label` printer driver ecosystem. Every class
+implements the `Transport` interface from
+[`@thermal-label/contracts`][contracts], so drivers program against one
+pull-based API regardless of the underlying channel.
 
 ## Install
 
@@ -17,26 +17,30 @@ pnpm add @thermal-label/transport
 ```
 
 Node consumers that use `UsbTransport` also need the native `usb`
-package:
+package, and consumers that use `SerialTransport` also need `serialport`:
 
 ```bash
-pnpm add usb
+pnpm add usb           # for UsbTransport
+pnpm add serialport    # for SerialTransport
 ```
 
-It is declared as an optional peer dependency so browser-only consumers
-never download it.
+Both are declared as optional peer dependencies so browser-only consumers
+never download them.
 
 ## What's in the box
 
-| Export                                  | Runtime | Purpose                                                                    |
-| --------------------------------------- | ------- | -------------------------------------------------------------------------- |
-| `UsbTransport`                          | Node    | libusb bindings for USB Printer Class devices. Interface 0, bulk IN / OUT. |
-| `TcpTransport`                          | Node    | Raw TCP (port 9100 / JetDirect by default) with partial-read buffering.    |
-| `WebUsbTransport`                       | Browser | `navigator.usb` picker + `USBDevice` wrapper.                              |
-| `WebBluetoothTransport`                 | Browser | GATT transport for BLE printers (Niimbot, Phomemo, Brother BLE, …).        |
-| `matchDevice` / `buildUsbFilters`       | Both    | Helpers for matching and requesting USB devices.                           |
-| `buildBluetoothRequestOptions`          | Both    | Build `navigator.bluetooth.requestDevice` options from a `BluetoothConfig`. |
-| `discoverAll`                           | Both    | Aggregate `PrinterDiscovery` implementations across drivers.               |
+| Export                            | Runtime | Purpose                                                                              |
+| --------------------------------- | ------- | ------------------------------------------------------------------------------------ |
+| `UsbTransport`                    | Node    | libusb bindings for USB Printer Class devices. Interface 0, bulk IN / OUT.           |
+| `TcpTransport`                    | Node    | Raw TCP (port 9100 / JetDirect by default) with partial-read buffering.              |
+| `SerialTransport`                 | Node    | `serialport` wrapper for `/dev/rfcomm*`, `/dev/ttyUSB*`, `COM<n>`.                   |
+| `WebUsbTransport`                 | Browser | `navigator.usb` picker + `USBDevice` wrapper.                                        |
+| `WebSerialTransport`              | Browser | `navigator.serial` picker + `SerialPort` wrapper (covers BT SPP + USB-serial).       |
+| `WebBluetoothTransport`           | Browser | GATT transport for BLE printers (Niimbot, Phomemo, Brother BLE, …).                  |
+| `matchDevice` / `buildUsbFilters` | Both    | Helpers for matching and requesting USB devices.                                     |
+| `buildBluetoothRequestOptions`    | Both    | Build `navigator.bluetooth.requestDevice` options from a `BluetoothConfig`.          |
+| `buildSerialRequestOptions`       | Both    | Build `navigator.serial.requestPort` options, optionally allow BT service class IDs. |
+| `discoverAll`                     | Both    | Aggregate `PrinterDiscovery` implementations across drivers.                         |
 
 ## Subpath imports
 
@@ -45,10 +49,14 @@ Transport classes are split by runtime so browser bundlers never see the
 
 ```ts
 // Node.js
-import { UsbTransport, TcpTransport } from '@thermal-label/transport/node';
+import { UsbTransport, TcpTransport, SerialTransport } from '@thermal-label/transport/node';
 
 // Browser
-import { WebUsbTransport, WebBluetoothTransport } from '@thermal-label/transport/web';
+import {
+  WebUsbTransport,
+  WebSerialTransport,
+  WebBluetoothTransport,
+} from '@thermal-label/transport/web';
 
 // Platform-neutral discovery helpers
 import { matchDevice, buildUsbFilters, discoverAll } from '@thermal-label/transport';
@@ -89,6 +97,31 @@ the buffer holds `n` bytes. Remainder bytes stay buffered for the next
 call. Connection timeouts reject with `TransportError`; read timeouts
 reject with `TransportTimeoutError`.
 
+### SerialTransport (Node)
+
+```ts
+import { SerialTransport } from '@thermal-label/transport/node';
+
+// Bluetooth SPP printer (Linux, after `bluetoothctl` pair + `rfcomm bind`)
+const transport = await SerialTransport.open('/dev/rfcomm0');
+await transport.write(payload);
+const status = await transport.read(32, 2000);
+await transport.close();
+
+// USB-to-serial adapter — baud rate matters, default is 9600
+const wired = await SerialTransport.open('/dev/ttyUSB0', 115200);
+```
+
+The same class covers Bluetooth SPP (`/dev/rfcomm*`, `COM<n>` after
+Windows pairing), USB-to-serial adapters, and native UARTs. The
+`baudRate` argument is forwarded to the OS driver; it is ignored for
+RFCOMM links (flow control happens on the Bluetooth layer) but still
+required by the `serialport` API, hence the 9600 default.
+
+> **macOS:** classic Bluetooth SPP was removed from macOS years ago.
+> Printers like the Brother QL-820NWB are reachable over serial on Linux
+> and Windows only — macOS users should connect via USB or TCP instead.
+
 ### WebUsbTransport (Browser)
 
 ```ts
@@ -103,6 +136,31 @@ const transport = await WebUsbTransport.request(filters);
 `WebUsbTransport.request` shows the browser's USB picker.
 `WebUsbTransport.fromDevice(device)` wraps a `USBDevice` obtained from
 `navigator.usb.getDevices()` (previously paired devices).
+
+### WebSerialTransport (Browser)
+
+```ts
+import { WebSerialTransport } from '@thermal-label/transport/web';
+
+// Paired Bluetooth SPP printer appears alongside wired serial ports
+const transport = await WebSerialTransport.request();
+await transport.write(payload);
+await transport.close();
+
+// Wrap a previously-authorized port returned by navigator.serial.getPorts()
+const [port] = await navigator.serial.getPorts();
+const wrapped = await WebSerialTransport.fromPort(port, 115200);
+```
+
+`WebSerialTransport.fromPort` expects a port that is **not yet open** —
+it calls `port.open({ baudRate })` internally. The browser picker lists
+USB-serial adapters and any Bluetooth SPP devices already paired at the
+OS level; Bluetooth pairing is not part of the Web Serial API and must
+happen in OS settings first.
+
+Chrome/Edge only on desktop (and Chrome Android). Firefox and Safari do
+not implement Web Serial. Same macOS caveat as `SerialTransport`: no
+classic Bluetooth SPP, so macOS users connect via USB or TCP instead.
 
 ### WebBluetoothTransport (Browser)
 
@@ -148,11 +206,11 @@ guide][contributing].
 These packages implement `PrinterAdapter` / `PrinterDiscovery` against
 the transports in this package:
 
-| Package                                 | Printer family                         |
-| --------------------------------------- | -------------------------------------- |
-| [`@thermal-label/labelmanager`][lm]     | DYMO LabelManager (thermal transfer)   |
-| [`@thermal-label/labelwriter`][lw]      | DYMO LabelWriter (direct thermal)      |
-| [`@thermal-label/brother-ql`][bql]      | Brother QL series (direct thermal)     |
+| Package                             | Printer family                       |
+| ----------------------------------- | ------------------------------------ |
+| [`@thermal-label/labelmanager`][lm] | DYMO LabelManager (thermal transfer) |
+| [`@thermal-label/labelwriter`][lw]  | DYMO LabelWriter (direct thermal)    |
+| [`@thermal-label/brother-ql`][bql]  | Brother QL series (direct thermal)   |
 
 ## Attribution
 

@@ -55,6 +55,26 @@ export function buildBluetoothRequestOptions(config: BluetoothConfig): RequestDe
 }
 
 /**
+ * Build Web Serial request options, optionally including Bluetooth service
+ * class IDs so paired SPP devices with custom UUIDs appear in the picker.
+ *
+ * For printers that advertise standard Serial Port Profile (UUID `0x1101`,
+ * which is most thermal printers with classic Bluetooth), no options are
+ * needed — pass the result as-is or call `WebSerialTransport.request()`
+ * without arguments.
+ *
+ * For printers with a custom RFCOMM service class, pass those UUIDs here.
+ */
+export function buildSerialRequestOptions(
+  bluetoothServiceClassIds?: readonly (number | string)[],
+): SerialPortRequestOptions {
+  if (!bluetoothServiceClassIds || bluetoothServiceClassIds.length === 0) {
+    return {};
+  }
+  return { allowedBluetoothServiceClassIds: [...bluetoothServiceClassIds] };
+}
+
+/**
  * Universal printer discovery — aggregates results from multiple driver
  * implementations.
  *

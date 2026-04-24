@@ -1,7 +1,7 @@
 {
   "name": "@thermal-label/transport",
-  "version": "0.1.0",
-  "description": "USB, TCP, WebUSB, and Web Bluetooth transport classes for thermal-label drivers",
+  "version": "0.2.0",
+  "description": "USB, TCP, Serial, WebUSB, Web Serial, and Web Bluetooth transport classes for thermal-label drivers",
   "keywords": [
     "thermal-label",
     "usb",
@@ -23,8 +23,14 @@
     "url": "https://github.com/thermal-label/transport/issues"
   },
   "funding": [
-    { "type": "github", "url": "https://github.com/sponsors/mannes" },
-    { "type": "ko-fi", "url": "https://ko-fi.com/mannes" }
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/mannes"
+    },
+    {
+      "type": "ko-fi",
+      "url": "https://ko-fi.com/mannes"
+    }
   ],
   "files": [
     "dist",
@@ -62,13 +68,17 @@
   },
   "prettier": "@mbtech-nl/prettier-config",
   "dependencies": {
-    "@thermal-label/contracts": "^0.1.0"
+    "@thermal-label/contracts": "^0.1.2"
   },
   "peerDependencies": {
+    "serialport": ">=12.0.0",
     "usb": ">=2.14.0"
   },
   "peerDependenciesMeta": {
     "usb": {
+      "optional": true
+    },
+    "serialport": {
       "optional": true
     }
   },
@@ -76,12 +86,15 @@
     "@mbtech-nl/eslint-config": "^1.0.0",
     "@mbtech-nl/prettier-config": "^1.0.0",
     "@mbtech-nl/tsconfig": "^1.0.0",
+    "@serialport/binding-mock": "^10.2.2",
     "@types/node": "^22.0.0",
-    "@types/web-bluetooth": "^0.0.21",
+    "@types/w3c-web-serial": "^1.0.8",
     "@types/w3c-web-usb": "^1.0.0",
+    "@types/web-bluetooth": "^0.0.21",
     "@vitest/coverage-v8": "^2.0.0",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
+    "serialport": "^12",
     "typescript": "~5.5.0",
     "usb": "^2.14.0",
     "vitest": "^2.0.0"

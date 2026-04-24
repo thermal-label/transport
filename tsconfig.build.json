@@ -6,7 +6,7 @@
     "rootDir": "./src",
     "noEmit": false,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["node", "w3c-web-usb", "web-bluetooth"]
+    "types": ["node", "w3c-web-usb", "web-bluetooth", "w3c-web-serial"]
   },
   "include": ["src"],
   "exclude": ["src/__tests__", "src/**/*.test.ts", "src/**/*.spec.ts"]

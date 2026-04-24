@@ -3,6 +3,7 @@
 // `usb` native addon.
 export {
   buildBluetoothRequestOptions,
+  buildSerialRequestOptions,
   buildUsbFilters,
   discoverAll,
   matchDevice,

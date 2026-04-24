@@ -7,6 +7,7 @@ import type {
 } from '@thermal-label/contracts';
 import {
   buildBluetoothRequestOptions,
+  buildSerialRequestOptions,
   buildUsbFilters,
   discoverAll,
   matchDevice,
@@ -87,6 +88,19 @@ describe('buildBluetoothRequestOptions', () => {
     expect(options).toEqual({
       filters: [{ namePrefix: 'QL-820', services: ['aaaa'] }],
       optionalServices: ['aaaa'],
+    });
+  });
+});
+
+describe('buildSerialRequestOptions', () => {
+  it('returns an empty object when no service class IDs are provided', () => {
+    expect(buildSerialRequestOptions()).toEqual({});
+    expect(buildSerialRequestOptions([])).toEqual({});
+  });
+
+  it('maps service class IDs into allowedBluetoothServiceClassIds', () => {
+    expect(buildSerialRequestOptions([0x1101, '0000abcd-0000-1000-8000-00805f9b34fb'])).toEqual({
+      allowedBluetoothServiceClassIds: [0x1101, '0000abcd-0000-1000-8000-00805f9b34fb'],
     });
   });
 });
