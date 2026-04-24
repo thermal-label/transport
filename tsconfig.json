@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@mbtech-nl/tsconfig/base",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "./src",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node", "w3c-web-usb", "web-bluetooth"]
+  },
+  "include": ["src"]
+}

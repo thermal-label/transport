@@ -1,0 +1,89 @@
+{
+  "name": "@thermal-label/transport",
+  "version": "0.1.0",
+  "description": "USB, TCP, WebUSB, and Web Bluetooth transport classes for thermal-label drivers",
+  "keywords": [
+    "thermal-label",
+    "usb",
+    "tcp",
+    "webusb",
+    "bluetooth",
+    "transport",
+    "printer"
+  ],
+  "type": "module",
+  "author": "Mannes Brak",
+  "license": "MIT",
+  "homepage": "https://github.com/thermal-label/transport",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thermal-label/transport.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thermal-label/transport/issues"
+  },
+  "funding": [
+    { "type": "github", "url": "https://github.com/sponsors/mannes" },
+    { "type": "ko-fi", "url": "https://ko-fi.com/mannes" }
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./node": {
+      "import": "./dist/node/index.js",
+      "types": "./dist/node/index.d.ts"
+    },
+    "./web": {
+      "import": "./dist/web/index.js",
+      "types": "./dist/web/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src",
+    "format": "prettier --write src"
+  },
+  "prettier": "@mbtech-nl/prettier-config",
+  "dependencies": {
+    "@thermal-label/contracts": "^0.1.0"
+  },
+  "peerDependencies": {
+    "usb": ">=2.14.0"
+  },
+  "peerDependenciesMeta": {
+    "usb": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@mbtech-nl/eslint-config": "^1.0.0",
+    "@mbtech-nl/prettier-config": "^1.0.0",
+    "@mbtech-nl/tsconfig": "^1.0.0",
+    "@types/node": "^22.0.0",
+    "@types/web-bluetooth": "^0.0.21",
+    "@types/w3c-web-usb": "^1.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "~5.5.0",
+    "usb": "^2.14.0",
+    "vitest": "^2.0.0"
+  }
+}
