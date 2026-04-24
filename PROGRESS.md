@@ -64,8 +64,8 @@ Tracks completion of the steps in `PLAN.md` §10.
 
 ## Step 8 — README
 
-- [ ] README per PLAN.md §7
-- [ ] Commit + push
+- [x] README per PLAN.md §7
+- [x] Commit + push
 
 ## Step 9 — Final
 
