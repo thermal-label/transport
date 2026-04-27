@@ -3,7 +3,7 @@ import {
   TransportTimeoutError,
   type Transport,
 } from '@thermal-label/contracts';
-import { SerialPort } from 'serialport';
+import type { SerialPort } from 'serialport';
 
 const DEFAULT_BAUD_RATE = 9600;
 
@@ -65,7 +65,8 @@ export class SerialTransport implements Transport {
    * @param baudRate - Serial baud rate. Default 9600. Ignored for
    *   Bluetooth SPP but required by the `serialport` API.
    */
-  static open(path: string, baudRate: number = DEFAULT_BAUD_RATE): Promise<SerialTransport> {
+  static async open(path: string, baudRate: number = DEFAULT_BAUD_RATE): Promise<SerialTransport> {
+    const { SerialPort } = await import('serialport');
     return new Promise((resolve, reject) => {
       const port = new SerialPort({ path, baudRate }, (err: Error | null) => {
         if (err) reject(err);

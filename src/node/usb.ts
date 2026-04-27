@@ -5,15 +5,12 @@ import {
   type DeviceDescriptor,
   type Transport,
 } from '@thermal-label/contracts';
-import {
-  getDeviceList,
+import type {
+  Device,
+  Endpoint,
   InEndpoint,
-  LibUSBException,
+  Interface,
   OutEndpoint,
-  usb,
-  type Device,
-  type Endpoint,
-  type Interface,
 } from 'usb';
 
 const INTERFACE_NUMBER = 0;
@@ -57,8 +54,12 @@ export class UsbTransport implements Transport {
    *
    * @throws DeviceNotFoundError if no matching device is attached.
    */
-  // eslint-disable-next-line @typescript-eslint/require-await -- async so any thrown error surfaces as a rejection
   static async open(vid: number, pid: number): Promise<UsbTransport> {
+    const usbModule = await import('usb');
+    const { getDeviceList } = usbModule;
+    const InEndpointCtor = usbModule.InEndpoint;
+    const OutEndpointCtor = usbModule.OutEndpoint;
+
     const device = getDeviceList().find(
       d => d.deviceDescriptor.idVendor === vid && d.deviceDescriptor.idProduct === pid,
     );
@@ -76,10 +77,10 @@ export class UsbTransport implements Transport {
     iface.claim();
 
     const inEndpoint = iface.endpoints.find(
-      (e: Endpoint): e is InEndpoint => e instanceof InEndpoint,
+      (e: Endpoint): e is InEndpoint => e instanceof InEndpointCtor,
     );
     const outEndpoint = iface.endpoints.find(
-      (e: Endpoint): e is OutEndpoint => e instanceof OutEndpoint,
+      (e: Endpoint): e is OutEndpoint => e instanceof OutEndpointCtor,
     );
 
     if (!inEndpoint || !outEndpoint) {
@@ -114,12 +115,11 @@ export class UsbTransport implements Transport {
       const buf = await this.inEndpoint.transferAsync(length);
       return buf ? new Uint8Array(buf) : new Uint8Array(0);
     } catch (err) {
-      if (
-        timeout !== undefined &&
-        err instanceof LibUSBException &&
-        err.errno === usb.LIBUSB_ERROR_TIMEOUT
-      ) {
-        throw new TransportTimeoutError('usb', timeout);
+      if (timeout !== undefined) {
+        const { LibUSBException, usb } = await import('usb');
+        if (err instanceof LibUSBException && err.errno === usb.LIBUSB_ERROR_TIMEOUT) {
+          throw new TransportTimeoutError('usb', timeout);
+        }
       }
       throw err;
     }
