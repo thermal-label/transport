@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@thermal-label/contracts':
-        specifier: ^0.1.2
-        version: 0.1.2
+        specifier: ^0.2.0
+        version: 0.2.0
     devDependencies:
       '@mbtech-nl/eslint-config':
         specifier: ^1.0.0
@@ -314,8 +314,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@mbtech-nl/bitmap@1.0.1':
-    resolution: {integrity: sha512-Mfmw2s97d8B1gkqkUUN0E69cF+ZfFXDOJOvGbhC5XbRu04PEoItHhPI3J85w2FKHRyDX/96xErfohFil36dprg==}
+  '@mbtech-nl/bitmap@1.2.0':
+    resolution: {integrity: sha512-P5UfR/PXM6CQcQ5WA5kEVl0P+ZgVxQPCKR2bGdP01a4p/ycn8fMBoiwM7j5Ng1LoPW+CcnRRr0kUy9vF56U/Pw==}
     engines: {node: '>=24.0.0', pnpm: '>=9.0.0'}
 
   '@mbtech-nl/eslint-config@1.0.1':
@@ -534,8 +534,8 @@ packages:
     resolution: {integrity: sha512-9On64rhzuqKdOQyiYLYv2lQOh3TZU/D3+IWCR5gk0alPel2nwpp4YwDEGiUBfrQZEdQ6xww0PWkzqth4wqwX3Q==}
     engines: {node: '>=12.0.0'}
 
-  '@thermal-label/contracts@0.1.2':
-    resolution: {integrity: sha512-p3Fj9PjGrTdCtNoMHcQNbCSfVffFd0E42okIAjIyoCNRsTM+L2qR7AAVIL6EX33EFxV7A7F5ziGpNZxz9yNU7w==}
+  '@thermal-label/contracts@0.2.0':
+    resolution: {integrity: sha512-EqruuizBc8bgZwthZYir9f4t9YWWajMncTOn2+qkWPyxq/z3vU8giIcB4oYfQy7KYcltK0t8L5HKQJrCyvO5zw==}
 
   '@tybys/wasm-util@0.10.1':
     resolution: {integrity: sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg==}
@@ -1854,7 +1854,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@mbtech-nl/bitmap@1.0.1': {}
+  '@mbtech-nl/bitmap@1.2.0': {}
 
   '@mbtech-nl/eslint-config@1.0.1(@typescript-eslint/utils@8.59.0(eslint@9.39.4)(typescript@5.5.4))(eslint@9.39.4)(typescript@5.5.4)':
     dependencies:
@@ -2016,9 +2016,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@thermal-label/contracts@0.1.2':
+  '@thermal-label/contracts@0.2.0':
     dependencies:
-      '@mbtech-nl/bitmap': 1.0.1
+      '@mbtech-nl/bitmap': 1.2.0
 
   '@tybys/wasm-util@0.10.1':
     dependencies:
