@@ -5,13 +5,7 @@ import {
   type DeviceDescriptor,
   type Transport,
 } from '@thermal-label/contracts';
-import type {
-  Device,
-  Endpoint,
-  InEndpoint,
-  Interface,
-  OutEndpoint,
-} from 'usb';
+import type { Device, Endpoint, InEndpoint, Interface, OutEndpoint } from 'usb';
 
 const INTERFACE_NUMBER = 0;
 
