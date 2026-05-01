@@ -24,7 +24,7 @@ Browser-only consumers download neither.
 
 | Export | Runtime | Purpose |
 |---|---|---|
-| `UsbTransport` | Node | libusb bindings for USB Printer Class devices. Interface 0, bulk IN/OUT. |
+| `UsbTransport` | Node | libusb bindings for USB Printer Class devices. Interface 0 by default; `bInterfaceNumber` opt-in for composite devices. |
 | `TcpTransport` | Node | Raw TCP (port 9100 / JetDirect by default) with partial-read buffering. |
 | `SerialTransport` | Node | `serialport` wrapper for `/dev/rfcomm*`, `/dev/ttyUSB*`, `COM<n>`. |
 | `WebUsbTransport` | Browser | `navigator.usb` picker + `USBDevice` wrapper. |
@@ -74,6 +74,26 @@ await transport.close();
 Opens the device, claims interface 0, detaches the `usblp` kernel driver on
 Linux when present, and locates Bulk IN / OUT endpoints. `read()` maps libusb
 timeouts to `TransportTimeoutError`.
+
+#### Composite devices (interface selection)
+
+For composite USB devices that expose more than one printer-class interface
+behind a single VID/PID — the LabelWriter 450 Duo is the canonical case —
+pass `bInterfaceNumber` to claim a specific interface. Two transports against
+the same `(vid, pid)` share the underlying libusb handle via an internal
+refcount, so they can coexist and close independently.
+
+```ts
+const label = await UsbTransport.open(0x0922, 0x1003, { bInterfaceNumber: 0 });
+const tape  = await UsbTransport.open(0x0922, 0x1003, { bInterfaceNumber: 1 });
+// …
+await label.close();   // releases interface 0; libusb handle stays open
+await tape.close();    // releases interface 1; libusb handle closes
+```
+
+`UsbTransport.openDevice(descriptor, { bInterfaceNumber })` accepts the same
+option. `WebUsbTransport.fromDevice(device, { interfaceNumber })` is the
+browser-side equivalent.
 
 ### `TcpTransport` (Node)
 

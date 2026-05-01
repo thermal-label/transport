@@ -30,25 +30,59 @@ class MockOutEndpoint {
   transferAsync = vi.fn<(buffer: Buffer) => Promise<number>>(() => Promise.resolve(0));
 }
 
-const inEndpoint = new MockInEndpoint();
-const outEndpoint = new MockOutEndpoint();
+interface MockInterface {
+  interfaceNumber: number;
+  claim: ReturnType<typeof vi.fn>;
+  isKernelDriverActive: ReturnType<typeof vi.fn>;
+  detachKernelDriver: ReturnType<typeof vi.fn>;
+  releaseAsync: ReturnType<typeof vi.fn>;
+  endpoints: unknown[];
+  inEndpoint: MockInEndpoint;
+  outEndpoint: MockOutEndpoint;
+}
 
-const iface = {
-  claim: vi.fn(),
-  isKernelDriverActive: vi.fn(() => false),
-  detachKernelDriver: vi.fn(),
-  releaseAsync: vi.fn(() => Promise.resolve()),
-  endpoints: [inEndpoint, outEndpoint] as unknown[],
-};
+function makeInterface(interfaceNumber: number): MockInterface {
+  const inEndpoint = new MockInEndpoint();
+  const outEndpoint = new MockOutEndpoint();
+  outEndpoint.transferAsync.mockResolvedValue(0);
+  return {
+    interfaceNumber,
+    claim: vi.fn(),
+    isKernelDriverActive: vi.fn(() => false),
+    detachKernelDriver: vi.fn(),
+    releaseAsync: vi.fn(() => Promise.resolve()),
+    endpoints: [inEndpoint, outEndpoint],
+    inEndpoint,
+    outEndpoint,
+  };
+}
 
-const device = {
-  deviceDescriptor: { idVendor: 0x04f9, idProduct: 0x2028 },
-  open: vi.fn(),
-  close: vi.fn(),
-  interface: vi.fn(() => iface),
-};
+interface MockDevice {
+  deviceDescriptor: { idVendor: number; idProduct: number };
+  open: ReturnType<typeof vi.fn>;
+  close: ReturnType<typeof vi.fn>;
+  interface: ReturnType<typeof vi.fn>;
+  interfaces: MockInterface[];
+}
 
-const deviceList: (typeof device)[] = [];
+function makeDevice(vid: number, pid: number, interfaceNumbers: number[] = [0]): MockDevice {
+  const interfaces = interfaceNumbers.map(n => makeInterface(n));
+  return {
+    deviceDescriptor: { idVendor: vid, idProduct: pid },
+    open: vi.fn(),
+    close: vi.fn(),
+    interface: vi.fn((n: number) => interfaces.find(i => i.interfaceNumber === n)),
+    interfaces,
+  };
+}
+
+function getInterface(device: MockDevice, n: number): MockInterface {
+  const i = device.interfaces.find(x => x.interfaceNumber === n);
+  if (!i) throw new Error(`mock device missing interface ${n.toString()}`);
+  return i;
+}
+
+const deviceList: MockDevice[] = [];
 
 vi.mock('usb', () => ({
   getDeviceList: (): typeof deviceList => deviceList,
@@ -64,15 +98,20 @@ async function loadTransport(): Promise<typeof UsbModule> {
 
 describe('UsbTransport', () => {
   const originalPlatform = process.platform;
+  let device: MockDevice;
+  let iface: MockInterface;
+  let inEndpoint: MockInEndpoint;
+  let outEndpoint: MockOutEndpoint;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     deviceList.length = 0;
-    iface.isKernelDriverActive.mockReturnValue(false);
-    inEndpoint.timeout = 0;
-    inEndpoint.transferAsync.mockReset();
-    outEndpoint.transferAsync.mockReset().mockResolvedValue(0);
-    iface.endpoints = [inEndpoint, outEndpoint];
+    device = makeDevice(0x04f9, 0x2028);
+    iface = getInterface(device, 0);
+    inEndpoint = iface.inEndpoint;
+    outEndpoint = iface.outEndpoint;
+    const { __resetDeviceCacheForTests } = await loadTransport();
+    __resetDeviceCacheForTests();
   });
 
   afterEach(() => {
@@ -158,6 +197,23 @@ describe('UsbTransport', () => {
       pid: 0x2028,
     });
     expect(transport.connected).toBe(true);
+  });
+
+  it('openDevice() forwards bInterfaceNumber to open()', async () => {
+    const composite = makeDevice(0x0922, 0x1003, [0, 1]);
+    deviceList.push(composite);
+    const { UsbTransport } = await loadTransport();
+    await UsbTransport.openDevice(
+      {
+        name: 'LabelWriter 450 Duo (tape)',
+        family: 'labelwriter',
+        transports: ['usb'],
+        vid: 0x0922,
+        pid: 0x1003,
+      },
+      { bInterfaceNumber: 1 },
+    );
+    expect(composite.interface).toHaveBeenCalledWith(1);
   });
 
   it('write() sends a Buffer to the OUT endpoint', async () => {
@@ -255,7 +311,7 @@ describe('UsbTransport', () => {
     expect(transport.connected).toBe(false);
   });
 
-  it('close() is idempotent', async () => {
+  it('close() is idempotent and does not underflow the refcount', async () => {
     deviceList.push(device);
     const { UsbTransport } = await loadTransport();
     const transport = await UsbTransport.open(0x04f9, 0x2028);
@@ -263,5 +319,85 @@ describe('UsbTransport', () => {
     await transport.close();
     expect(iface.releaseAsync).toHaveBeenCalledOnce();
     expect(device.close).toHaveBeenCalledOnce();
+
+    // A subsequent open of the same (vid, pid) must still work — proves
+    // the cache entry was actually evicted, not stuck at refcount 0.
+    deviceList.length = 0;
+    const fresh = makeDevice(0x04f9, 0x2028);
+    deviceList.push(fresh);
+    const next = await UsbTransport.open(0x04f9, 0x2028);
+    expect(fresh.open).toHaveBeenCalledOnce();
+    await next.close();
+  });
+
+  describe('composite-device interface selection', () => {
+    let composite: MockDevice;
+    let iface0: MockInterface;
+    let iface1: MockInterface;
+
+    beforeEach(() => {
+      composite = makeDevice(0x0922, 0x1003, [0, 1]);
+      iface0 = getInterface(composite, 0);
+      iface1 = getInterface(composite, 1);
+      deviceList.push(composite);
+    });
+
+    it('open() with bInterfaceNumber claims that interface and uses its endpoints', async () => {
+      const { UsbTransport } = await loadTransport();
+      const transport = await UsbTransport.open(0x0922, 0x1003, { bInterfaceNumber: 1 });
+
+      expect(composite.interface).toHaveBeenCalledWith(1);
+      expect(iface1.claim).toHaveBeenCalledOnce();
+      expect(iface0.claim).not.toHaveBeenCalled();
+
+      // Writes go to iface 1's OUT endpoint, not iface 0's.
+      await transport.write(new Uint8Array([0xaa]));
+      expect(iface1.outEndpoint.transferAsync).toHaveBeenCalledOnce();
+      expect(iface0.outEndpoint.transferAsync).not.toHaveBeenCalled();
+    });
+
+    it('two opens against the same device share the libusb handle (refcount)', async () => {
+      const { UsbTransport } = await loadTransport();
+      const label = await UsbTransport.open(0x0922, 0x1003, { bInterfaceNumber: 0 });
+      const tape = await UsbTransport.open(0x0922, 0x1003, { bInterfaceNumber: 1 });
+
+      expect(composite.open).toHaveBeenCalledOnce();
+      expect(iface0.claim).toHaveBeenCalledOnce();
+      expect(iface1.claim).toHaveBeenCalledOnce();
+
+      await label.close();
+      expect(iface0.releaseAsync).toHaveBeenCalledOnce();
+      expect(composite.close).not.toHaveBeenCalled();
+
+      await tape.close();
+      expect(iface1.releaseAsync).toHaveBeenCalledOnce();
+      expect(composite.close).toHaveBeenCalledOnce();
+    });
+
+    it('open() with non-existent bInterfaceNumber throws and releases the cache slot', async () => {
+      const { UsbTransport } = await loadTransport();
+      await expect(UsbTransport.open(0x0922, 0x1003, { bInterfaceNumber: 7 })).rejects.toThrow(
+        /no interface 7/,
+      );
+
+      // Failed open evicted the cache (refcount went to 0): device.open
+      // was called once and device.close was called once. A subsequent
+      // open re-acquires cleanly rather than reusing a stale entry.
+      expect(composite.open).toHaveBeenCalledOnce();
+      expect(composite.close).toHaveBeenCalledOnce();
+
+      const transport = await UsbTransport.open(0x0922, 0x1003, { bInterfaceNumber: 0 });
+      expect(composite.open).toHaveBeenCalledTimes(2);
+      await transport.close();
+      expect(composite.close).toHaveBeenCalledTimes(2);
+    });
+
+    it('open() error message names the interface number', async () => {
+      iface1.endpoints = [iface1.outEndpoint];
+      const { UsbTransport } = await loadTransport();
+      await expect(UsbTransport.open(0x0922, 0x1003, { bInterfaceNumber: 1 })).rejects.toThrow(
+        /interface 1/,
+      );
+    });
   });
 });

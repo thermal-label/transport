@@ -7,32 +7,106 @@ import {
 } from '@thermal-label/contracts';
 import type { Device, Endpoint, InEndpoint, Interface, OutEndpoint } from 'usb';
 
-const INTERFACE_NUMBER = 0;
+const DEFAULT_INTERFACE_NUMBER = 0;
+
+export interface UsbOpenOptions {
+  /** USB interface to claim. Defaults to 0. */
+  bInterfaceNumber?: number;
+}
+
+interface DeviceCacheEntry {
+  device: Device;
+  refcount: number;
+}
+
+const deviceCache = new Map<string, DeviceCacheEntry>();
+
+function deviceCacheKey(vid: number, pid: number): string {
+  return `${vid.toString()}:${pid.toString()}`;
+}
+
+async function acquireDevice(
+  vid: number,
+  pid: number,
+): Promise<{ device: Device; release: () => void }> {
+  const key = deviceCacheKey(vid, pid);
+  const cached = deviceCache.get(key);
+  if (cached) {
+    cached.refcount += 1;
+    return {
+      device: cached.device,
+      release: () => {
+        releaseDevice(key);
+      },
+    };
+  }
+
+  const { getDeviceList } = await import('usb');
+  const device = getDeviceList().find(
+    d => d.deviceDescriptor.idVendor === vid && d.deviceDescriptor.idProduct === pid,
+  );
+  if (!device) throw new DeviceNotFoundError(vid, pid);
+
+  device.open();
+  deviceCache.set(key, { device, refcount: 1 });
+  return {
+    device,
+    release: () => {
+      releaseDevice(key);
+    },
+  };
+}
+
+function releaseDevice(key: string): void {
+  const entry = deviceCache.get(key);
+  if (!entry) return;
+  entry.refcount -= 1;
+  if (entry.refcount <= 0) {
+    deviceCache.delete(key);
+    entry.device.close();
+  }
+}
+
+/**
+ * Test-only: clear the device cache without calling `device.close()` on
+ * cached entries. Not part of the public API; do not call from production
+ * code.
+ */
+export function __resetDeviceCacheForTests(): void {
+  deviceCache.clear();
+}
 
 /**
  * USB transport over libusb for Node.js.
  *
- * Assumes a USB Printer Class device on interface 0. Covers every printer
- * family currently targeted by `@thermal-label/*` drivers
- * (LabelManager, LabelWriter, Brother QL).
+ * Defaults to interface 0 — covering single-interface printer-class
+ * devices used by `@thermal-label/*` drivers (LabelManager, LabelWriter,
+ * Brother QL). Pass `{ bInterfaceNumber }` to claim a different
+ * interface; this is needed for composite devices like the LabelWriter
+ * 450 Duo, which exposes one interface per engine.
+ *
+ * Two transports may be opened against the same `(vid, pid)` device on
+ * different interfaces; they share the underlying libusb handle via an
+ * internal refcounted cache so that closing one does not invalidate the
+ * other.
  */
 export class UsbTransport implements Transport {
-  private readonly device: Device;
   private readonly iface: Interface;
   private readonly inEndpoint: InEndpoint;
   private readonly outEndpoint: OutEndpoint;
+  private readonly releaseDevice: () => void;
   private _connected = true;
 
   private constructor(
-    device: Device,
     iface: Interface,
     inEndpoint: InEndpoint,
     outEndpoint: OutEndpoint,
+    release: () => void,
   ) {
-    this.device = device;
     this.iface = iface;
     this.inEndpoint = inEndpoint;
     this.outEndpoint = outEndpoint;
+    this.releaseDevice = release;
   }
 
   get connected(): boolean {
@@ -42,46 +116,55 @@ export class UsbTransport implements Transport {
   /**
    * Open a USB Printer Class device by VID/PID.
    *
-   * Enumerates via libusb, opens the device, claims interface 0, detaches
-   * the `usblp` kernel driver on Linux if attached, and locates Bulk IN /
-   * OUT endpoints.
+   * Enumerates via libusb, opens (or refcount-acquires) the device,
+   * claims the requested interface, detaches the `usblp` kernel driver
+   * on Linux if attached, and locates Bulk IN / OUT endpoints on that
+   * interface.
    *
    * @throws DeviceNotFoundError if no matching device is attached.
    */
-  static async open(vid: number, pid: number): Promise<UsbTransport> {
+  static async open(vid: number, pid: number, options?: UsbOpenOptions): Promise<UsbTransport> {
+    const interfaceNumber = options?.bInterfaceNumber ?? DEFAULT_INTERFACE_NUMBER;
+
     const usbModule = await import('usb');
-    const { getDeviceList } = usbModule;
     const InEndpointCtor = usbModule.InEndpoint;
     const OutEndpointCtor = usbModule.OutEndpoint;
 
-    const device = getDeviceList().find(
-      d => d.deviceDescriptor.idVendor === vid && d.deviceDescriptor.idProduct === pid,
-    );
-    if (!device) throw new DeviceNotFoundError(vid, pid);
+    const { device, release } = await acquireDevice(vid, pid);
 
-    device.open();
-    const iface = device.interface(INTERFACE_NUMBER);
+    try {
+      const exists = device.interfaces?.some(i => i.interfaceNumber === interfaceNumber) ?? false;
+      if (!exists) {
+        throw new Error(`USB device has no interface ${interfaceNumber.toString()}`);
+      }
+      const iface = device.interface(interfaceNumber);
 
-    // On Linux the `usblp` kernel driver auto-claims printer-class
-    // interfaces. Detach before libusb can claim. Safe no-op on other
-    // platforms and when no driver is attached.
-    if (process.platform === 'linux' && iface.isKernelDriverActive()) {
-      iface.detachKernelDriver();
+      // On Linux the `usblp` kernel driver auto-claims printer-class
+      // interfaces. Detach before libusb can claim. Safe no-op on other
+      // platforms and when no driver is attached.
+      if (process.platform === 'linux' && iface.isKernelDriverActive()) {
+        iface.detachKernelDriver();
+      }
+      iface.claim();
+
+      const inEndpoint = iface.endpoints.find(
+        (e: Endpoint): e is InEndpoint => e instanceof InEndpointCtor,
+      );
+      const outEndpoint = iface.endpoints.find(
+        (e: Endpoint): e is OutEndpoint => e instanceof OutEndpointCtor,
+      );
+
+      if (!inEndpoint || !outEndpoint) {
+        throw new Error(
+          `USB device missing bulk IN or OUT endpoint on interface ${interfaceNumber.toString()}`,
+        );
+      }
+
+      return new UsbTransport(iface, inEndpoint, outEndpoint, release);
+    } catch (err) {
+      release();
+      throw err;
     }
-    iface.claim();
-
-    const inEndpoint = iface.endpoints.find(
-      (e: Endpoint): e is InEndpoint => e instanceof InEndpointCtor,
-    );
-    const outEndpoint = iface.endpoints.find(
-      (e: Endpoint): e is OutEndpoint => e instanceof OutEndpointCtor,
-    );
-
-    if (!inEndpoint || !outEndpoint) {
-      throw new Error('USB device missing bulk IN or OUT endpoint on interface 0');
-    }
-
-    return new UsbTransport(device, iface, inEndpoint, outEndpoint);
   }
 
   /**
@@ -90,11 +173,14 @@ export class UsbTransport implements Transport {
    * @throws DeviceNotFoundError if the descriptor has no VID or PID
    *   (network-only printers cannot be opened over USB).
    */
-  static async openDevice(descriptor: DeviceDescriptor): Promise<UsbTransport> {
+  static async openDevice(
+    descriptor: DeviceDescriptor,
+    options?: UsbOpenOptions,
+  ): Promise<UsbTransport> {
     if (descriptor.vid === undefined || descriptor.pid === undefined) {
       throw new DeviceNotFoundError(descriptor.vid, descriptor.pid);
     }
-    return UsbTransport.open(descriptor.vid, descriptor.pid);
+    return UsbTransport.open(descriptor.vid, descriptor.pid, options);
   }
 
   async write(data: Uint8Array): Promise<void> {
@@ -123,6 +209,6 @@ export class UsbTransport implements Transport {
     if (!this._connected) return;
     this._connected = false;
     await this.iface.releaseAsync();
-    this.device.close();
+    this.releaseDevice();
   }
 }

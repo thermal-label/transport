@@ -4,15 +4,24 @@ import {
   type Transport,
 } from '@thermal-label/contracts';
 
-const INTERFACE_NUMBER = 0;
-const CONFIGURATION_VALUE = 1;
+const DEFAULT_INTERFACE_NUMBER = 0;
+const DEFAULT_CONFIGURATION_VALUE = 1;
+
+export interface WebUsbOpenOptions {
+  /** USB interface to claim. Defaults to 0. */
+  interfaceNumber?: number;
+  /** USB configuration to select. Defaults to 1. */
+  configurationValue?: number;
+}
 
 /**
  * WebUSB transport for browser environments.
  *
- * Assumes a USB Printer Class device on interface 0 — the same
- * assumption as `UsbTransport` for Node.js. Callers obtain a
- * `USBDevice` via `navigator.usb.requestDevice()` (prompts the user) or
+ * Defaults to interface 0 — the same default as Node's `UsbTransport`.
+ * Pass `{ interfaceNumber }` to claim a different interface; this is
+ * needed for composite devices like the LabelWriter 450 Duo, which
+ * exposes one interface per engine. Callers obtain a `USBDevice` via
+ * `navigator.usb.requestDevice()` (prompts the user) or
  * `navigator.usb.getDevices()` (previously paired).
  */
 export class WebUsbTransport implements Transport {
@@ -43,40 +52,50 @@ export class WebUsbTransport implements Transport {
    *
    * @param filters - USB device filters (typically `{ vendorId, productId }`
    *   pairs built by `buildUsbFilters`).
+   * @param options - Optional interface/configuration selection.
    */
-  static async request(filters: USBDeviceFilter[]): Promise<WebUsbTransport> {
+  static async request(
+    filters: USBDeviceFilter[],
+    options?: WebUsbOpenOptions,
+  ): Promise<WebUsbTransport> {
     const device = await navigator.usb.requestDevice({ filters });
-    return WebUsbTransport.fromDevice(device);
+    return WebUsbTransport.fromDevice(device, options);
   }
 
   /**
    * Wrap an already-selected `USBDevice`.
    *
-   * Opens the device, selects configuration 1, claims interface 0, and
-   * resolves the bulk IN / OUT endpoint numbers from the interface
-   * descriptor. Use this when the `USBDevice` came from
-   * `navigator.usb.getDevices()` (previously paired devices) or from
-   * external code.
+   * Opens the device, selects the requested configuration if it is not
+   * already active, claims the requested interface, and resolves the
+   * bulk IN / OUT endpoint numbers from that interface descriptor. Use
+   * this when the `USBDevice` came from `navigator.usb.getDevices()`
+   * (previously paired devices) or from external code.
    */
-  static async fromDevice(device: USBDevice): Promise<WebUsbTransport> {
-    await device.open();
-    if (device.configuration?.configurationValue !== CONFIGURATION_VALUE) {
-      await device.selectConfiguration(CONFIGURATION_VALUE);
-    }
-    await device.claimInterface(INTERFACE_NUMBER);
+  static async fromDevice(
+    device: USBDevice,
+    options?: WebUsbOpenOptions,
+  ): Promise<WebUsbTransport> {
+    const interfaceNumber = options?.interfaceNumber ?? DEFAULT_INTERFACE_NUMBER;
+    const configurationValue = options?.configurationValue ?? DEFAULT_CONFIGURATION_VALUE;
 
-    const iface = device.configuration?.interfaces.find(
-      i => i.interfaceNumber === INTERFACE_NUMBER,
-    );
+    await device.open();
+    if (device.configuration?.configurationValue !== configurationValue) {
+      await device.selectConfiguration(configurationValue);
+    }
+    await device.claimInterface(interfaceNumber);
+
+    const iface = device.configuration?.interfaces.find(i => i.interfaceNumber === interfaceNumber);
     const endpoints = iface?.alternate.endpoints ?? [];
     const outEp = endpoints.find(e => e.direction === 'out');
     const inEp = endpoints.find(e => e.direction === 'in');
 
     if (!outEp || !inEp) {
-      throw new Error('WebUSB device missing bulk IN or OUT endpoint on interface 0');
+      throw new Error(
+        `WebUSB device missing bulk IN or OUT endpoint on interface ${interfaceNumber.toString()}`,
+      );
     }
 
-    return new WebUsbTransport(device, INTERFACE_NUMBER, outEp.endpointNumber, inEp.endpointNumber);
+    return new WebUsbTransport(device, interfaceNumber, outEp.endpointNumber, inEp.endpointNumber);
   }
 
   async write(data: Uint8Array): Promise<void> {

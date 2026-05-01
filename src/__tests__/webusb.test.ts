@@ -13,17 +13,33 @@ interface MockDevice {
   configuration: USBConfiguration | null;
 }
 
+interface InterfaceShape {
+  interfaceNumber: number;
+  endpoints: { endpointNumber: number; direction: string }[];
+}
+
 function makeConfiguration(
-  endpoints: { endpointNumber: number; direction: string }[],
+  arg:
+    | { endpointNumber: number; direction: string }[]
+    | { configurationValue?: number; interfaces: InterfaceShape[] },
 ): USBConfiguration {
+  if (Array.isArray(arg)) {
+    return {
+      configurationValue: 1,
+      interfaces: [
+        {
+          interfaceNumber: 0,
+          alternate: { endpoints: arg },
+        },
+      ],
+    } as unknown as USBConfiguration;
+  }
   return {
-    configurationValue: 1,
-    interfaces: [
-      {
-        interfaceNumber: 0,
-        alternate: { endpoints },
-      },
-    ],
+    configurationValue: arg.configurationValue ?? 1,
+    interfaces: arg.interfaces.map(i => ({
+      interfaceNumber: i.interfaceNumber,
+      alternate: { endpoints: i.endpoints },
+    })),
   } as unknown as USBConfiguration;
 }
 
@@ -74,6 +90,36 @@ describe('WebUsbTransport', () => {
     expect(transport.connected).toBe(true);
   });
 
+  it('request() forwards options to fromDevice', async () => {
+    const { mock, device } = makeDevice(
+      makeConfiguration({
+        interfaces: [
+          {
+            interfaceNumber: 0,
+            endpoints: [
+              { endpointNumber: 1, direction: 'out' },
+              { endpointNumber: 2, direction: 'in' },
+            ],
+          },
+          {
+            interfaceNumber: 1,
+            endpoints: [
+              { endpointNumber: 3, direction: 'out' },
+              { endpointNumber: 4, direction: 'in' },
+            ],
+          },
+        ],
+      }),
+    );
+    requestDevice.mockResolvedValueOnce(device);
+    const transport = await WebUsbTransport.request([{ vendorId: 0x0922, productId: 0x1003 }], {
+      interfaceNumber: 1,
+    });
+    expect(mock.claimInterface).toHaveBeenCalledWith(1);
+    await transport.write(new Uint8Array([0xaa]));
+    expect(mock.transferOut).toHaveBeenCalledWith(3, expect.any(Uint8Array));
+  });
+
   it('fromDevice() opens, claims interface 0, and discovers endpoints', async () => {
     const { mock, device } = makeDevice();
     await WebUsbTransport.fromDevice(device);
@@ -99,6 +145,75 @@ describe('WebUsbTransport', () => {
   it('fromDevice() throws when interface 0 has no IN or OUT endpoint', async () => {
     const { device } = makeDevice(makeConfiguration([{ endpointNumber: 1, direction: 'out' }]));
     await expect(WebUsbTransport.fromDevice(device)).rejects.toThrow(/bulk IN or OUT/);
+  });
+
+  it('fromDevice() with interfaceNumber:1 claims that interface and resolves its endpoints', async () => {
+    const { mock, device } = makeDevice(
+      makeConfiguration({
+        interfaces: [
+          {
+            interfaceNumber: 0,
+            endpoints: [
+              { endpointNumber: 1, direction: 'out' },
+              { endpointNumber: 2, direction: 'in' },
+            ],
+          },
+          {
+            interfaceNumber: 1,
+            endpoints: [
+              { endpointNumber: 5, direction: 'out' },
+              { endpointNumber: 6, direction: 'in' },
+            ],
+          },
+        ],
+      }),
+    );
+    const transport = await WebUsbTransport.fromDevice(device, { interfaceNumber: 1 });
+    expect(mock.claimInterface).toHaveBeenCalledWith(1);
+
+    await transport.write(new Uint8Array([0x42]));
+    expect(mock.transferOut).toHaveBeenCalledWith(5, expect.any(Uint8Array));
+
+    await transport.read(3);
+    expect(mock.transferIn).toHaveBeenCalledWith(6, 3);
+  });
+
+  it('fromDevice() with custom configurationValue selects it when not active', async () => {
+    const populated = makeConfiguration({
+      configurationValue: 2,
+      interfaces: [
+        {
+          interfaceNumber: 0,
+          endpoints: [
+            { endpointNumber: 1, direction: 'out' },
+            { endpointNumber: 2, direction: 'in' },
+          ],
+        },
+      ],
+    });
+    const { mock, device } = makeDevice(null);
+    mock.selectConfiguration.mockImplementationOnce(() => {
+      mock.configuration = populated;
+      return Promise.resolve();
+    });
+    await WebUsbTransport.fromDevice(device, { configurationValue: 2 });
+    expect(mock.selectConfiguration).toHaveBeenCalledWith(2);
+  });
+
+  it('fromDevice() error message names the interface number', async () => {
+    const { device } = makeDevice(
+      makeConfiguration({
+        interfaces: [
+          {
+            interfaceNumber: 1,
+            endpoints: [{ endpointNumber: 5, direction: 'out' }],
+          },
+        ],
+      }),
+    );
+    await expect(WebUsbTransport.fromDevice(device, { interfaceNumber: 1 })).rejects.toThrow(
+      /interface 1/,
+    );
   });
 
   it('write() calls transferOut with the OUT endpoint and data', async () => {
@@ -160,6 +275,32 @@ describe('WebUsbTransport', () => {
     expect(mock.releaseInterface).toHaveBeenCalledWith(0);
     expect(mock.close).toHaveBeenCalledOnce();
     expect(transport.connected).toBe(false);
+  });
+
+  it('close() releases the claimed interface, not interface 0', async () => {
+    const { mock, device } = makeDevice(
+      makeConfiguration({
+        interfaces: [
+          {
+            interfaceNumber: 0,
+            endpoints: [
+              { endpointNumber: 1, direction: 'out' },
+              { endpointNumber: 2, direction: 'in' },
+            ],
+          },
+          {
+            interfaceNumber: 1,
+            endpoints: [
+              { endpointNumber: 5, direction: 'out' },
+              { endpointNumber: 6, direction: 'in' },
+            ],
+          },
+        ],
+      }),
+    );
+    const transport = await WebUsbTransport.fromDevice(device, { interfaceNumber: 1 });
+    await transport.close();
+    expect(mock.releaseInterface).toHaveBeenCalledWith(1);
   });
 
   it('close() is idempotent', async () => {
