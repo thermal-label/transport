@@ -50,7 +50,7 @@ Full docs at **<https://thermal-label.github.io/transport/>**.
 
 | | |
 |---|---|
-| Node | ≥ 24 (for `UsbTransport`, `TcpTransport`, `SerialTransport`) |
+| Node | ≥ 20.9 (Node 24 LTS recommended) — for `UsbTransport`, `TcpTransport`, `SerialTransport` |
 | Browsers | Chrome / Edge 89+ (WebUSB, Web Serial); Web Bluetooth on Chrome / Edge desktop and Chrome Android |
 | Optional peers | `usb` (Node USB), `serialport` (Node Serial) |
 | Peer | `@thermal-label/contracts` |
