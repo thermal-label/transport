@@ -2,7 +2,7 @@ import {
   DeviceNotFoundError,
   TransportClosedError,
   TransportTimeoutError,
-  type DeviceDescriptor,
+  type DeviceEntry,
   type Transport,
 } from '@thermal-label/contracts';
 import type { Device, Endpoint, InEndpoint, Interface, OutEndpoint } from 'usb';
@@ -168,19 +168,15 @@ export class UsbTransport implements Transport {
   }
 
   /**
-   * Convenience wrapper for opening a device from a `DeviceDescriptor`.
+   * Convenience wrapper for opening a device from a `DeviceEntry`.
    *
-   * @throws DeviceNotFoundError if the descriptor has no VID or PID
-   *   (network-only printers cannot be opened over USB).
+   * @throws DeviceNotFoundError if the entry has no `transports.usb`
+   *   block (network-only printers cannot be opened over USB).
    */
-  static async openDevice(
-    descriptor: DeviceDescriptor,
-    options?: UsbOpenOptions,
-  ): Promise<UsbTransport> {
-    if (descriptor.vid === undefined || descriptor.pid === undefined) {
-      throw new DeviceNotFoundError(descriptor.vid, descriptor.pid);
-    }
-    return UsbTransport.open(descriptor.vid, descriptor.pid, options);
+  static async openDevice(entry: DeviceEntry, options?: UsbOpenOptions): Promise<UsbTransport> {
+    const usb = entry.transports.usb;
+    if (!usb) throw new DeviceNotFoundError();
+    return UsbTransport.open(parseInt(usb.vid, 16), parseInt(usb.pid, 16), options);
   }
 
   async write(data: Uint8Array): Promise<void> {

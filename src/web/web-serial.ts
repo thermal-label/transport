@@ -96,12 +96,12 @@ export class WebSerialTransport implements Transport {
   }
 
   async write(data: Uint8Array): Promise<void> {
-    if (!this._connected) throw new TransportClosedError('web-serial');
+    if (!this._connected) throw new TransportClosedError('serial');
     await this.writer.write(data);
   }
 
   async read(length: number, timeout?: number): Promise<Uint8Array> {
-    if (!this._connected) throw new TransportClosedError('web-serial');
+    if (!this._connected) throw new TransportClosedError('serial');
 
     if (this.rxBuffer.length >= length) {
       return this.drainBuffer(length);
@@ -113,7 +113,7 @@ export class WebSerialTransport implements Transport {
           ? undefined
           : setTimeout(() => {
               if (this.waiter?.timer === timer) this.waiter = null;
-              reject(new TransportTimeoutError('web-serial', timeout));
+              reject(new TransportTimeoutError('serial', timeout));
             }, timeout);
       this.waiter = { resolve, reject, needed: length, timer };
     });
@@ -126,7 +126,7 @@ export class WebSerialTransport implements Transport {
     if (waiter) {
       this.waiter = null;
       if (waiter.timer) clearTimeout(waiter.timer);
-      waiter.reject(new TransportClosedError('web-serial'));
+      waiter.reject(new TransportClosedError('serial'));
     }
 
     // Cancelling the reader releases its lock on the readable stream
@@ -166,7 +166,7 @@ export class WebSerialTransport implements Transport {
         if (waiter) {
           this.waiter = null;
           if (waiter.timer) clearTimeout(waiter.timer);
-          waiter.reject(new TransportClosedError('web-serial'));
+          waiter.reject(new TransportClosedError('serial'));
         }
       }
     }

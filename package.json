@@ -1,6 +1,6 @@
 {
   "name": "@thermal-label/transport",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "description": "USB, TCP, Serial, WebUSB, Web Serial, and Web Bluetooth transport classes for thermal-label drivers",
   "keywords": [
     "thermal-label",
@@ -68,7 +68,7 @@
   },
   "prettier": "@mbtech-nl/prettier-config",
   "dependencies": {
-    "@thermal-label/contracts": "^0.2.0"
+    "@thermal-label/contracts": "^0.5.0"
   },
   "peerDependencies": {
     "serialport": ">=12.0.0",
@@ -83,9 +83,9 @@
     }
   },
   "devDependencies": {
-    "@mbtech-nl/eslint-config": "^1.0.0",
-    "@mbtech-nl/prettier-config": "^1.0.0",
-    "@mbtech-nl/tsconfig": "^1.0.0",
+    "@mbtech-nl/eslint-config": "^1.1.0",
+    "@mbtech-nl/prettier-config": "^1.1.0",
+    "@mbtech-nl/tsconfig": "^1.1.0",
     "@serialport/binding-mock": "^10.2.2",
     "@types/node": "^22.0.0",
     "@types/w3c-web-serial": "^1.0.8",

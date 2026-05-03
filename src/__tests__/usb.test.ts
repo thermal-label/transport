@@ -175,26 +175,30 @@ describe('UsbTransport', () => {
     await expect(UsbTransport.open(0x04f9, 0x2028)).rejects.toThrow(/bulk IN or OUT/);
   });
 
-  it('openDevice() rejects descriptors without vid or pid', async () => {
+  it('openDevice() rejects entries without a usb transport', async () => {
     const { UsbTransport } = await loadTransport();
     await expect(
       UsbTransport.openDevice({
+        key: 'NETWORK_ONLY',
         name: 'Network-only printer',
         family: 'labelwriter',
-        transports: ['tcp'],
+        transports: { tcp: { port: 9100 } },
+        engines: [{ role: 'primary', protocol: 'lw-450', dpi: 300, headDots: 672 }],
+        support: { status: 'untested' },
       }),
     ).rejects.toBeInstanceOf(DeviceNotFoundError);
   });
 
-  it('openDevice() delegates to open() when vid/pid are set', async () => {
+  it('openDevice() delegates to open() when transports.usb is set', async () => {
     deviceList.push(device);
     const { UsbTransport } = await loadTransport();
     const transport = await UsbTransport.openDevice({
+      key: 'QL_820NWB',
       name: 'Brother QL-820NWB',
       family: 'brother-ql',
-      transports: ['usb'],
-      vid: 0x04f9,
-      pid: 0x2028,
+      transports: { usb: { vid: '0x04f9', pid: '0x2028' } },
+      engines: [{ role: 'primary', protocol: 'brother-ql', dpi: 300, headDots: 720 }],
+      support: { status: 'untested' },
     });
     expect(transport.connected).toBe(true);
   });
@@ -205,11 +209,12 @@ describe('UsbTransport', () => {
     const { UsbTransport } = await loadTransport();
     await UsbTransport.openDevice(
       {
+        key: 'LW_450_DUO_TAPE',
         name: 'LabelWriter 450 Duo (tape)',
         family: 'labelwriter',
-        transports: ['usb'],
-        vid: 0x0922,
-        pid: 0x1003,
+        transports: { usb: { vid: '0x0922', pid: '0x1003' } },
+        engines: [{ role: 'tape', protocol: 'lw-450', dpi: 300, headDots: 672 }],
+        support: { status: 'untested' },
       },
       { bInterfaceNumber: 1 },
     );

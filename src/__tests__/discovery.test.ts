@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type {
-  DeviceDescriptor,
+  DeviceEntry,
   DiscoveredPrinter,
   PrinterAdapter,
   PrinterDiscovery,
@@ -13,28 +13,42 @@ import {
   matchDevice,
 } from '../discovery.js';
 
-const brotherQL: DeviceDescriptor = {
+const engine = { role: 'primary', protocol: 'test', dpi: 300, headDots: 672 } as const;
+
+const brotherQL: DeviceEntry = {
+  key: 'QL_820NWB',
   name: 'Brother QL-820NWB',
   family: 'brother-ql',
-  transports: ['usb', 'tcp', 'web-bluetooth'],
-  vid: 0x04f9,
-  pid: 0x209d,
+  transports: {
+    usb: { vid: '0x04f9', pid: '0x209d' },
+    tcp: { port: 9100 },
+    'bluetooth-gatt': {
+      serviceUuid: '0000ff00-0000-1000-8000-00805f9b34fb',
+      txCharacteristicUuid: '0000ff02-0000-1000-8000-00805f9b34fb',
+    },
+  },
+  engines: [engine],
+  support: { status: 'untested' },
 };
-const labelwriter: DeviceDescriptor = {
+const labelwriter: DeviceEntry = {
+  key: 'LW_550',
   name: 'DYMO LabelWriter 550',
   family: 'labelwriter',
-  transports: ['usb'],
-  vid: 0x0922,
-  pid: 0x0028,
+  transports: { usb: { vid: '0x0922', pid: '0x0028' } },
+  engines: [engine],
+  support: { status: 'untested' },
 };
-const networkOnly: DeviceDescriptor = {
+const networkOnly: DeviceEntry = {
+  key: 'NETWORK_ONLY',
   name: 'Network-only printer',
   family: 'generic-tcp',
-  transports: ['tcp'],
+  transports: { tcp: { port: 9100 } },
+  engines: [engine],
+  support: { status: 'untested' },
 };
 
 describe('matchDevice', () => {
-  it('finds the matching descriptor for known VID/PID', () => {
+  it('finds the matching entry for known VID/PID', () => {
     const match = matchDevice(0x04f9, 0x209d, [labelwriter, brotherQL]);
     expect(match).toBe(brotherQL);
   });
@@ -43,13 +57,13 @@ describe('matchDevice', () => {
     expect(matchDevice(0xdead, 0xbeef, [brotherQL])).toBeUndefined();
   });
 
-  it('skips descriptors with undefined vid or pid', () => {
+  it('skips entries without a usb transport', () => {
     expect(matchDevice(0x04f9, 0x209d, [networkOnly])).toBeUndefined();
   });
 });
 
 describe('buildUsbFilters', () => {
-  it('produces a filter per USB-capable descriptor', () => {
+  it('produces a filter per USB-capable entry', () => {
     const filters = buildUsbFilters([brotherQL, labelwriter]);
     expect(filters).toEqual([
       { vendorId: 0x04f9, productId: 0x209d },
@@ -57,12 +71,12 @@ describe('buildUsbFilters', () => {
     ]);
   });
 
-  it('skips descriptors without vid or pid', () => {
+  it('skips entries without a usb transport', () => {
     const filters = buildUsbFilters([networkOnly, brotherQL]);
     expect(filters).toEqual([{ vendorId: 0x04f9, productId: 0x209d }]);
   });
 
-  it('returns an empty array for no USB-capable descriptors', () => {
+  it('returns an empty array for no USB-capable entries', () => {
     expect(buildUsbFilters([networkOnly])).toEqual([]);
   });
 });

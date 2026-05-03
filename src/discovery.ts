@@ -1,41 +1,47 @@
 import type {
-  BluetoothConfig,
-  DeviceDescriptor,
+  BluetoothGattTransport,
+  DeviceEntry,
   DiscoveredPrinter,
   PrinterDiscovery,
 } from '@thermal-label/contracts';
 
 /**
- * Match a USB device against a list of known device descriptors.
+ * Match a USB device against a list of known device entries.
  *
- * Descriptors with undefined `vid` or `pid` (network-only printers) are
- * skipped — they cannot match a USB device.
+ * Entries without a `transports.usb` block (network-only printers) are
+ * skipped — they cannot match a USB device. VID/PID hex strings on the
+ * registry are parsed at the boundary.
  */
 export function matchDevice(
   vid: number,
   pid: number,
-  registries: readonly DeviceDescriptor[],
-): DeviceDescriptor | undefined {
-  return registries.find(d => d.vid === vid && d.pid === pid);
+  registries: readonly DeviceEntry[],
+): DeviceEntry | undefined {
+  return registries.find(d => {
+    const usb = d.transports.usb;
+    if (!usb) return false;
+    return parseInt(usb.vid, 16) === vid && parseInt(usb.pid, 16) === pid;
+  });
 }
 
 /**
  * Build WebUSB filters from one or more device registries.
  *
- * Skips descriptors without `vid` or `pid`. Pass the result to
+ * Skips entries without a `transports.usb` block. Pass the result to
  * `navigator.usb.requestDevice({ filters })` or `WebUsbTransport.request`.
  */
-export function buildUsbFilters(registries: readonly DeviceDescriptor[]): USBDeviceFilter[] {
+export function buildUsbFilters(registries: readonly DeviceEntry[]): USBDeviceFilter[] {
   const filters: USBDeviceFilter[] = [];
   for (const d of registries) {
-    if (d.vid === undefined || d.pid === undefined) continue;
-    filters.push({ vendorId: d.vid, productId: d.pid });
+    const usb = d.transports.usb;
+    if (!usb) continue;
+    filters.push({ vendorId: parseInt(usb.vid, 16), productId: parseInt(usb.pid, 16) });
   }
   return filters;
 }
 
 /**
- * Build Web Bluetooth request options from a `BluetoothConfig`.
+ * Build Web Bluetooth request options from a `BluetoothGattTransport`.
  *
  * Uses `filters[].services` (required so the user picker narrows to the
  * correct printer family) and `optionalServices` (required so the
@@ -43,7 +49,7 @@ export function buildUsbFilters(registries: readonly DeviceDescriptor[]): USBDev
  * `namePrefix` is set, it is added to the filter to further narrow the
  * picker. See DECISIONS.md D2.
  */
-export function buildBluetoothRequestOptions(config: BluetoothConfig): RequestDeviceOptions {
+export function buildBluetoothRequestOptions(config: BluetoothGattTransport): RequestDeviceOptions {
   const filter: BluetoothLEScanFilter =
     config.namePrefix === undefined
       ? { services: [config.serviceUuid] }

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   TransportClosedError,
   TransportTimeoutError,
-  type BluetoothConfig,
+  type BluetoothGattTransport,
 } from '@thermal-label/contracts';
 import { WebBluetoothTransport } from '../web/web-bluetooth.js';
 
@@ -83,7 +83,7 @@ function makeDevice(): DeviceMock {
   return device;
 }
 
-async function setupTransport(overrides: Partial<BluetoothConfig> = {}): Promise<{
+async function setupTransport(overrides: Partial<BluetoothGattTransport> = {}): Promise<{
   transport: WebBluetoothTransport;
   device: DeviceMock;
   tx: CharacteristicMock;
@@ -108,7 +108,7 @@ async function setupTransport(overrides: Partial<BluetoothConfig> = {}): Promise
   const requestDevice = vi.fn().mockResolvedValue(device);
   vi.stubGlobal('navigator', { bluetooth: { requestDevice } });
 
-  const config: BluetoothConfig = {
+  const config: BluetoothGattTransport = {
     serviceUuid: SERVICE_UUID,
     txCharacteristicUuid: TX_UUID,
     ...overrides,
@@ -135,7 +135,7 @@ describe('WebBluetoothTransport', () => {
     });
   });
 
-  it('request() adds namePrefix to the filter when BluetoothConfig has one', async () => {
+  it('request() adds namePrefix to the filter when BluetoothGattTransport has one', async () => {
     const { requestDevice } = await setupTransport({ namePrefix: 'QL-820' });
     expect(requestDevice).toHaveBeenCalledWith({
       filters: [{ namePrefix: 'QL-820', services: [SERVICE_UUID] }],

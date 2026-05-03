@@ -99,12 +99,12 @@ export class WebUsbTransport implements Transport {
   }
 
   async write(data: Uint8Array): Promise<void> {
-    if (!this._connected) throw new TransportClosedError('webusb');
+    if (!this._connected) throw new TransportClosedError('usb');
     await this.device.transferOut(this.endpointOut, data);
   }
 
   async read(length: number, timeout?: number): Promise<Uint8Array> {
-    if (!this._connected) throw new TransportClosedError('webusb');
+    if (!this._connected) throw new TransportClosedError('usb');
     const transferPromise = this.device.transferIn(this.endpointIn, length);
 
     const result =
@@ -114,7 +114,7 @@ export class WebUsbTransport implements Transport {
             transferPromise,
             new Promise<never>((_, reject) => {
               setTimeout(() => {
-                reject(new TransportTimeoutError('webusb', timeout));
+                reject(new TransportTimeoutError('usb', timeout));
               }, timeout);
             }),
           ]);

@@ -1,7 +1,7 @@
 import {
   TransportClosedError,
   TransportTimeoutError,
-  type BluetoothConfig,
+  type BluetoothGattTransport,
   type Transport,
 } from '@thermal-label/contracts';
 
@@ -54,7 +54,7 @@ export class WebBluetoothTransport implements Transport {
     if (waiter) {
       this.waiter = null;
       if (waiter.timer) clearTimeout(waiter.timer);
-      waiter.reject(new TransportClosedError('web-bluetooth'));
+      waiter.reject(new TransportClosedError('bluetooth-gatt'));
     }
   };
 
@@ -80,12 +80,12 @@ export class WebBluetoothTransport implements Transport {
   /**
    * Request a BLE printer via the browser Bluetooth picker.
    *
-   * Uses `BluetoothConfig` from the device descriptor to filter the
+   * Uses `BluetoothGattTransport` from the device descriptor to filter the
    * picker and resolve the TX / RX characteristics on the primary GATT
    * service. If `rxCharacteristicUuid` is omitted, the TX characteristic
    * is used for both directions (DECISIONS.md D6).
    */
-  static async request(config: BluetoothConfig): Promise<WebBluetoothTransport> {
+  static async request(config: BluetoothGattTransport): Promise<WebBluetoothTransport> {
     const filters: BluetoothLEScanFilter[] = [
       config.namePrefix === undefined
         ? { services: [config.serviceUuid] }
@@ -108,7 +108,7 @@ export class WebBluetoothTransport implements Transport {
   }
 
   async write(data: Uint8Array): Promise<void> {
-    if (!this._connected) throw new TransportClosedError('web-bluetooth');
+    if (!this._connected) throw new TransportClosedError('bluetooth-gatt');
     for (let offset = 0; offset < data.length; offset += this.mtu) {
       const chunk = data.subarray(offset, offset + this.mtu);
       await this.txCharacteristic.writeValueWithoutResponse(chunk);
@@ -121,7 +121,7 @@ export class WebBluetoothTransport implements Transport {
   }
 
   async read(length: number, timeout?: number): Promise<Uint8Array> {
-    if (!this._connected) throw new TransportClosedError('web-bluetooth');
+    if (!this._connected) throw new TransportClosedError('bluetooth-gatt');
 
     if (this.rxBuffer.length >= length) {
       return this.drainBuffer(length);
@@ -133,7 +133,7 @@ export class WebBluetoothTransport implements Transport {
           ? undefined
           : setTimeout(() => {
               if (this.waiter?.timer === timer) this.waiter = null;
-              reject(new TransportTimeoutError('web-bluetooth', timeout));
+              reject(new TransportTimeoutError('bluetooth-gatt', timeout));
             }, timeout);
       this.waiter = { resolve, reject, needed: length, timer };
     });
