@@ -78,6 +78,39 @@ export class WebBluetoothTransport implements Transport {
   }
 
   /**
+   * Wrap a `BluetoothDevice` plus pre-resolved TX / RX characteristics.
+   *
+   * Use when discovery cannot be expressed through the canonical-UUID
+   * filter that `request()` assumes — for example, drivers that match
+   * services by UUID prefix and derive the characteristic UUIDs from
+   * the matched service's tail at runtime (e.g. DYMO LetraTag,
+   * DECISIONS.md D4 in the letratag repo).
+   *
+   * Caller is responsible for:
+   *  - calling `device.gatt.connect()` and `getPrimaryService(...)`
+   *  - resolving the TX and RX `BluetoothRemoteGATTCharacteristic`s
+   *  - calling `rxCharacteristic.startNotifications()` before the first
+   *    `read()` (the transport listens for `characteristicvaluechanged`
+   *    events, but Web Bluetooth requires explicit notifications start)
+   *
+   * If `rxCharacteristic` is omitted, `txCharacteristic` is used for both
+   * directions (DECISIONS.md D6).
+   */
+  static fromCharacteristics(
+    device: BluetoothDevice,
+    txCharacteristic: BluetoothRemoteGATTCharacteristic,
+    rxCharacteristic?: BluetoothRemoteGATTCharacteristic,
+    mtu?: number,
+  ): WebBluetoothTransport {
+    return new WebBluetoothTransport(
+      device,
+      txCharacteristic,
+      rxCharacteristic ?? txCharacteristic,
+      mtu ?? DEFAULT_MTU,
+    );
+  }
+
+  /**
    * Request a BLE printer via the browser Bluetooth picker.
    *
    * Uses `BluetoothGattTransport` from the device descriptor to filter the

@@ -272,4 +272,51 @@ describe('WebBluetoothTransport', () => {
     await transport.close();
     expect(tx.stopNotifications).toHaveBeenCalledOnce();
   });
+
+  it('fromCharacteristics() wraps pre-resolved characteristics without calling the picker', () => {
+    const tx = makeCharacteristic();
+    const rx = makeCharacteristic();
+    const device = makeDevice();
+
+    const transport = WebBluetoothTransport.fromCharacteristics(
+      device as unknown as BluetoothDevice,
+      tx as unknown as BluetoothRemoteGATTCharacteristic,
+      rx as unknown as BluetoothRemoteGATTCharacteristic,
+    );
+
+    expect(transport.connected).toBe(true);
+    // Caller is responsible for startNotifications — factory must not call it.
+    expect(rx.startNotifications).not.toHaveBeenCalled();
+    expect(tx.startNotifications).not.toHaveBeenCalled();
+  });
+
+  it('fromCharacteristics() reads notifications fired on the supplied RX characteristic', async () => {
+    const tx = makeCharacteristic();
+    const rx = makeCharacteristic();
+    const device = makeDevice();
+
+    const transport = WebBluetoothTransport.fromCharacteristics(
+      device as unknown as BluetoothDevice,
+      tx as unknown as BluetoothRemoteGATTCharacteristic,
+      rx as unknown as BluetoothRemoteGATTCharacteristic,
+    );
+
+    rx.fireValue([0x1b, 0x52, 0x00]);
+    const result = await transport.read(3);
+    expect(Array.from(result)).toEqual([0x1b, 0x52, 0x00]);
+  });
+
+  it('fromCharacteristics() falls back to TX when RX is omitted', async () => {
+    const tx = makeCharacteristic();
+    const device = makeDevice();
+
+    const transport = WebBluetoothTransport.fromCharacteristics(
+      device as unknown as BluetoothDevice,
+      tx as unknown as BluetoothRemoteGATTCharacteristic,
+    );
+
+    tx.fireValue([0xaa]);
+    const result = await transport.read(1);
+    expect(Array.from(result)).toEqual([0xaa]);
+  });
 });
