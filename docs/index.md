@@ -193,4 +193,5 @@ discovery from the others.
 | License | MIT |
 
 [Source on GitHub](https://github.com/thermal-label/transport) ·
-[npm](https://www.npmjs.com/package/@thermal-label/transport)
+[npm](https://www.npmjs.com/package/@thermal-label/transport) ·
+[API reference](./api/README)

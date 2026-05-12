@@ -1,0 +1,41 @@
+{
+  "$schema": "https://typedoc-plugin-markdown.org/schema.json",
+  "entryPoints": ["src/index.ts", "src/node/index.ts", "src/web/index.ts"],
+  "entryPointStrategy": "expand",
+  "out": "docs/api",
+  "plugin": ["typedoc-plugin-markdown"],
+  "skipErrorChecking": true,
+  "disableSources": true,
+  "readme": "none",
+  "indexFormat": "table",
+  "useCodeBlocks": true,
+  "expandObjects": true,
+  "expandParameters": true,
+  "parametersFormat": "table",
+  "interfacePropertiesFormat": "table",
+  "typeDeclarationFormat": "table",
+  "propertyMembersFormat": "table",
+  "hideBreadcrumbs": true,
+  "hidePageHeader": true,
+  "externalSymbolLinkMappings": {
+    "@thermal-label/contracts": {
+      "BluetoothGattTransport": "/contracts/api/interfaces/BluetoothGattTransport",
+      "BluetoothSppTransport": "/contracts/api/interfaces/BluetoothSppTransport",
+      "ConnectOptions": "/contracts/api/type-aliases/ConnectOptions",
+      "DeviceIdentificationRequiredError": "/contracts/api/classes/DeviceIdentificationRequiredError",
+      "DeviceNotFoundError": "/contracts/api/classes/DeviceNotFoundError",
+      "DiscoveredPrinter": "/contracts/api/interfaces/DiscoveredPrinter",
+      "OpenOptions": "/contracts/api/interfaces/OpenOptions",
+      "PrinterDiscovery": "/contracts/api/interfaces/PrinterDiscovery",
+      "SerialTransport": "/contracts/api/interfaces/SerialTransport",
+      "TcpTransport": "/contracts/api/interfaces/TcpTransport",
+      "Transport": "/contracts/api/interfaces/Transport",
+      "TransportClosedError": "/contracts/api/classes/TransportClosedError",
+      "TransportError": "/contracts/api/classes/TransportError",
+      "TransportTimeoutError": "/contracts/api/classes/TransportTimeoutError",
+      "TransportType": "/contracts/api/type-aliases/TransportType",
+      "UsbTransport": "/contracts/api/interfaces/UsbTransport",
+      "*": "/contracts/api/README"
+    }
+  }
+}

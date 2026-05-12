@@ -64,7 +64,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src",
-    "format": "prettier --write src"
+    "format": "prettier --write src",
+    "docs:api": "typedoc"
   },
   "prettier": "@mbtech-nl/prettier-config",
   "dependencies": {
@@ -95,6 +96,8 @@
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
     "serialport": "^12",
+    "typedoc": "^0.28.0",
+    "typedoc-plugin-markdown": "^4.0.0",
     "typescript": "~5.5.0",
     "usb": "^2.14.0",
     "vitest": "^2.0.0"
