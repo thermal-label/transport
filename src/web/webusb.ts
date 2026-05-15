@@ -29,6 +29,8 @@ export class WebUsbTransport implements Transport {
   private readonly interfaceNumber: number;
   private readonly endpointOut: number;
   private readonly endpointIn: number;
+  /** `wMaxPacketSize` of the bulk IN endpoint — see `read()`. */
+  private readonly packetSizeIn: number;
   private _connected = true;
 
   private constructor(
@@ -36,11 +38,13 @@ export class WebUsbTransport implements Transport {
     interfaceNumber: number,
     endpointOut: number,
     endpointIn: number,
+    packetSizeIn: number,
   ) {
     this.device = device;
     this.interfaceNumber = interfaceNumber;
     this.endpointOut = endpointOut;
     this.endpointIn = endpointIn;
+    this.packetSizeIn = packetSizeIn;
   }
 
   get connected(): boolean {
@@ -95,7 +99,28 @@ export class WebUsbTransport implements Transport {
       );
     }
 
-    return new WebUsbTransport(device, interfaceNumber, outEp.endpointNumber, inEp.endpointNumber);
+    // `inEp.packetSize` is the endpoint's `wMaxPacketSize`. `|| 64` is a
+    // defensive floor: a `0`/`undefined` would make `read()`'s round-up
+    // produce `NaN`. Rounding a small read up to 64 is harmless — the
+    // device's short packet still terminates the transfer.
+    const packetSizeIn = inEp.packetSize || 64;
+
+    // Kept deliberately: `read()` rounds transfers up to the IN endpoint's
+    // packet size, so a retest log should *state* the resolved size rather
+    // than have anyone guess it.
+    // eslint-disable-next-line no-console
+    console.debug(
+      `[transport/webusb] interface ${interfaceNumber.toString()}: ` +
+        `IN endpoint ${inEp.endpointNumber.toString()}, packetSize ${packetSizeIn.toString()}`,
+    );
+
+    return new WebUsbTransport(
+      device,
+      interfaceNumber,
+      outEp.endpointNumber,
+      inEp.endpointNumber,
+      packetSizeIn,
+    );
   }
 
   async write(data: Uint8Array): Promise<void> {
@@ -105,7 +130,15 @@ export class WebUsbTransport implements Transport {
 
   async read(length: number, timeout?: number): Promise<Uint8Array> {
     if (!this._connected) throw new TransportClosedError('usb');
-    const transferPromise = this.device.transferIn(this.endpointIn, length);
+    // Chromium WebUSB: `transferIn` must request a whole number of
+    // `wMaxPacketSize`-sized packets, else the transfer can stall waiting
+    // for a packet-aligned buffer the device never sends. Round the
+    // request up to a packet multiple; the device's short packet still
+    // terminates the transfer at the true message boundary. The result is
+    // sliced back to the caller's requested length below, so the
+    // `read(length)` contract is unchanged.
+    const aligned = Math.ceil(length / this.packetSizeIn) * this.packetSizeIn;
+    const transferPromise = this.device.transferIn(this.endpointIn, aligned);
 
     const result =
       timeout === undefined
@@ -120,7 +153,25 @@ export class WebUsbTransport implements Transport {
           ]);
 
     if (!result.data) return new Uint8Array(0);
-    return new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength);
+    const full = new Uint8Array(
+      result.data.buffer,
+      result.data.byteOffset,
+      result.data.byteLength,
+    );
+    if (result.data.byteLength === aligned) {
+      // The transfer filled exactly with no short packet seen — for a
+      // request/response device there may be more data queued. Should
+      // never fire for LabelWriter responses; if it does, investigate.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[transport/webusb] read filled exactly ${aligned.toString()} bytes with no ` +
+          `short packet — device may have more data queued`,
+      );
+    }
+    // `Math.min`, not a bare `subarray(0, length)`: if the device sent
+    // fewer bytes than `length`, callers must see the real count so their
+    // `bytes.length < EXPECTED` guards still fire.
+    return full.subarray(0, Math.min(length, full.byteLength));
   }
 
   async close(): Promise<void> {

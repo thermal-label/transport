@@ -13,15 +13,19 @@ interface MockDevice {
   configuration: USBConfiguration | null;
 }
 
+interface EndpointShape {
+  endpointNumber: number;
+  direction: string;
+  packetSize?: number;
+}
+
 interface InterfaceShape {
   interfaceNumber: number;
-  endpoints: { endpointNumber: number; direction: string }[];
+  endpoints: EndpointShape[];
 }
 
 function makeConfiguration(
-  arg:
-    | { endpointNumber: number; direction: string }[]
-    | { configurationValue?: number; interfaces: InterfaceShape[] },
+  arg: EndpointShape[] | { configurationValue?: number; interfaces: InterfaceShape[] },
 ): USBConfiguration {
   if (Array.isArray(arg)) {
     return {
@@ -46,7 +50,7 @@ function makeConfiguration(
 function makeDevice(
   configuration: USBConfiguration | null = makeConfiguration([
     { endpointNumber: 1, direction: 'out' },
-    { endpointNumber: 2, direction: 'in' },
+    { endpointNumber: 2, direction: 'in', packetSize: 64 },
   ]),
 ): { mock: MockDevice; device: USBDevice } {
   const mock: MockDevice = {
@@ -175,7 +179,9 @@ describe('WebUsbTransport', () => {
     expect(mock.transferOut).toHaveBeenCalledWith(5, expect.any(Uint8Array));
 
     await transport.read(3);
-    expect(mock.transferIn).toHaveBeenCalledWith(6, 3);
+    // Endpoint 6 declares no packetSize -> 64-byte fallback -> read(3)
+    // rounds up to one 64-byte packet.
+    expect(mock.transferIn).toHaveBeenCalledWith(6, 64);
   });
 
   it('fromDevice() with custom configurationValue selects it when not active', async () => {
@@ -228,9 +234,74 @@ describe('WebUsbTransport', () => {
     const { mock, device } = makeDevice();
     const transport = await WebUsbTransport.fromDevice(device);
     const result = await transport.read(3);
-    expect(mock.transferIn).toHaveBeenCalledWith(2, 3);
+    // packetSize 64 -> read(3) rounds the transferIn request up to 64.
+    expect(mock.transferIn).toHaveBeenCalledWith(2, 64);
     expect(result).toBeInstanceOf(Uint8Array);
     expect(Array.from(result)).toEqual([1, 2, 3]);
+  });
+
+  it('read() rounds the transferIn request up to the IN endpoint packet size', async () => {
+    const { mock, device } = makeDevice();
+    const transport = await WebUsbTransport.fromDevice(device);
+    await transport.read(32);
+    // ceil(32 / 64) * 64 = 64
+    expect(mock.transferIn).toHaveBeenCalledWith(2, 64);
+  });
+
+  it('read() rounds up to a 16-byte packet endpoint (LW Duo sub-packet case)', async () => {
+    const { mock, device } = makeDevice(
+      makeConfiguration([
+        { endpointNumber: 1, direction: 'out' },
+        { endpointNumber: 2, direction: 'in', packetSize: 16 },
+      ]),
+    );
+    const transport = await WebUsbTransport.fromDevice(device);
+    await transport.read(1);
+    // ceil(1 / 16) * 16 = 16 — the sub-packet read that stalled Chromium.
+    expect(mock.transferIn).toHaveBeenCalledWith(2, 16);
+  });
+
+  it('read() falls back to a 64-byte packet size when the endpoint omits packetSize', async () => {
+    const { mock, device } = makeDevice(
+      makeConfiguration([
+        { endpointNumber: 1, direction: 'out' },
+        { endpointNumber: 2, direction: 'in' },
+      ]),
+    );
+    const transport = await WebUsbTransport.fromDevice(device);
+    await transport.read(1);
+    expect(mock.transferIn).toHaveBeenCalledWith(2, 64);
+  });
+
+  it('read() slices an over-aligned transfer back to the requested length', async () => {
+    const { mock, device } = makeDevice();
+    mock.transferIn.mockResolvedValueOnce({
+      status: 'ok',
+      data: new DataView(new Uint8Array(64).buffer),
+    });
+    const transport = await WebUsbTransport.fromDevice(device);
+    // transferIn fills all 64 bytes (no short packet) — read() warns and
+    // still slices back to the requested 32.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {
+      /* swallow the expected desync warning */
+    });
+    const result = await transport.read(32);
+    expect(result.length).toBe(32);
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+
+  it('read() returns the real byte count when the device sends a short response', async () => {
+    const { mock, device } = makeDevice();
+    mock.transferIn.mockResolvedValueOnce({
+      status: 'ok',
+      data: new DataView(new Uint8Array([9, 9, 9]).buffer),
+    });
+    const transport = await WebUsbTransport.fromDevice(device);
+    const result = await transport.read(32);
+    // Device sent 3 bytes for a 32-byte request — caller must see 3, not
+    // a padded 32, so `bytes.length < EXPECTED` guards still fire.
+    expect(result.length).toBe(3);
   });
 
   it('read() returns empty Uint8Array when transferIn resolves without data', async () => {
