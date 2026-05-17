@@ -4,6 +4,7 @@
 
 [![npm version](https://img.shields.io/npm/v/@thermal-label/transport.svg)](https://www.npmjs.com/package/@thermal-label/transport)
 [![CI](https://github.com/thermal-label/transport/actions/workflows/ci.yml/badge.svg)](https://github.com/thermal-label/transport/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/thermal-label/transport/branch/main/graph/badge.svg)](https://codecov.io/gh/thermal-label/transport)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 ## Install
