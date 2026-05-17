@@ -119,11 +119,25 @@ export class WebBluetoothTransport implements Transport {
    * is used for both directions (DECISIONS.md D6).
    */
   static async request(config: BluetoothGattTransport): Promise<WebBluetoothTransport> {
-    const filters: BluetoothLEScanFilter[] = [
+    // Web Bluetooth filters check the device's *advertisement*, not its
+    // GATT table. Some chassis (e.g. Niimbot B1, 2024+ firmware) host
+    // the driver's primary service in GATT but only advertise a generic
+    // BLE-UART service (MCHP 49535343-…) instead. With a service-only
+    // filter the picker would never see them.
+    //
+    // OR-fallback: when `namePrefix` is set, accept name-only matches
+    // alongside the strict name+service match. The service is kept in
+    // `optionalServices` so we can still resolve it post-pair via
+    // `getPrimaryService(config.serviceUuid)`. The filters array is an
+    // OR; the strict filter is listed first so matching devices show
+    // higher in the picker on browsers that preserve filter order.
+    const filters: BluetoothLEScanFilter[] =
       config.namePrefix === undefined
-        ? { services: [config.serviceUuid] }
-        : { namePrefix: config.namePrefix, services: [config.serviceUuid] },
-    ];
+        ? [{ services: [config.serviceUuid] }]
+        : [
+            { namePrefix: config.namePrefix, services: [config.serviceUuid] },
+            { namePrefix: config.namePrefix },
+          ];
     const device = await navigator.bluetooth.requestDevice({
       filters,
       optionalServices: [config.serviceUuid],

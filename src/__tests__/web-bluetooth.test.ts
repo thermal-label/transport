@@ -137,8 +137,11 @@ describe('WebBluetoothTransport', () => {
 
   it('request() adds namePrefix to the filter when BluetoothGattTransport has one', async () => {
     const { requestDevice } = await setupTransport({ namePrefix: 'QL-820' });
+    // Two filters: strict name+service first, name-only fallback second.
+    // The OR-fallback lets devices that advertise under a generic service
+    // UUID (e.g. MCHP BLE-UART) still appear in the picker.
     expect(requestDevice).toHaveBeenCalledWith({
-      filters: [{ namePrefix: 'QL-820', services: [SERVICE_UUID] }],
+      filters: [{ namePrefix: 'QL-820', services: [SERVICE_UUID] }, { namePrefix: 'QL-820' }],
       optionalServices: [SERVICE_UUID],
     });
   });

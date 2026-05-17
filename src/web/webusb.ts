@@ -153,11 +153,7 @@ export class WebUsbTransport implements Transport {
           ]);
 
     if (!result.data) return new Uint8Array(0);
-    const full = new Uint8Array(
-      result.data.buffer,
-      result.data.byteOffset,
-      result.data.byteLength,
-    );
+    const full = new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength);
     if (result.data.byteLength === aligned) {
       // The transfer filled exactly with no short packet seen — for a
       // request/response device there may be more data queued. Should
