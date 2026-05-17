@@ -155,7 +155,7 @@ interface.
 | ------ | ------ |
 | `vid` | `number` |
 | `pid` | `number` |
-| `options?` | `UsbOpenOptions` |
+| `options?` | [`UsbOpenOptions`](../interfaces/UsbOpenOptions.md) |
 
 #### Returns
 
@@ -180,7 +180,7 @@ Convenience wrapper for opening a device from a `DeviceEntry`.
 | Parameter | Type |
 | ------ | ------ |
 | `entry` | [`DeviceEntry`](/contracts/api/README) |
-| `options?` | `UsbOpenOptions` |
+| `options?` | [`UsbOpenOptions`](../interfaces/UsbOpenOptions.md) |
 
 #### Returns
 

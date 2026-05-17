@@ -148,7 +148,7 @@ this when the `USBDevice` came from `navigator.usb.getDevices()`
 | Parameter | Type |
 | ------ | ------ |
 | `device` | `USBDevice` |
-| `options?` | `WebUsbOpenOptions` |
+| `options?` | [`WebUsbOpenOptions`](../interfaces/WebUsbOpenOptions.md) |
 
 #### Returns
 
@@ -169,7 +169,7 @@ Show the browser's USB picker and wrap the selected device.
 | Parameter | Type | Description |
 | ------ | ------ | ------ |
 | `filters` | `USBDeviceFilter`[] | USB device filters (typically `{ vendorId, productId }` pairs built by `buildUsbFilters`). |
-| `options?` | `WebUsbOpenOptions` | Optional interface/configuration selection. |
+| `options?` | [`WebUsbOpenOptions`](../interfaces/WebUsbOpenOptions.md) | Optional interface/configuration selection. |
 
 #### Returns
 
