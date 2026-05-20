@@ -322,4 +322,67 @@ describe('WebBluetoothTransport', () => {
     const result = await transport.read(1);
     expect(Array.from(result)).toEqual([0xaa]);
   });
+
+  it('requestAny() unions filters across configs and unions optionalServices', async () => {
+    const device = makeDevice();
+    const requestDevice = vi.fn().mockResolvedValue(device);
+    vi.stubGlobal('navigator', { bluetooth: { requestDevice } });
+
+    const SERVICE_A = '0000aaaa-0000-1000-8000-00805f9b34fb';
+    const SERVICE_B = '0000bbbb-0000-1000-8000-00805f9b34fb';
+    const configs: BluetoothGattTransport[] = [
+      { serviceUuid: SERVICE_A, txCharacteristicUuid: TX_UUID, namePrefix: 'B1-' },
+      { serviceUuid: SERVICE_A, txCharacteristicUuid: TX_UUID, namePrefix: 'D110_M-' },
+      { serviceUuid: SERVICE_B, txCharacteristicUuid: TX_UUID }, // no namePrefix
+    ];
+    const picked = await WebBluetoothTransport.requestAny(configs);
+    expect(picked).toBe(device);
+    // Each name-prefixed config emits two filters (strict + name-only);
+    // the unprefixed one emits a single service-only filter.
+    expect(requestDevice).toHaveBeenCalledWith({
+      filters: [
+        { namePrefix: 'B1-', services: [SERVICE_A] },
+        { namePrefix: 'B1-' },
+        { namePrefix: 'D110_M-', services: [SERVICE_A] },
+        { namePrefix: 'D110_M-' },
+        { services: [SERVICE_B] },
+      ],
+      // De-duplicated; preserves first-seen order.
+      optionalServices: [SERVICE_A, SERVICE_B],
+    });
+  });
+
+  it('requestAny() rejects when called with no configs', async () => {
+    vi.stubGlobal('navigator', { bluetooth: { requestDevice: vi.fn() } });
+    await expect(WebBluetoothTransport.requestAny([])).rejects.toThrow(/no configs/);
+  });
+
+  it('fromDevice() wraps a pre-paired device without opening the picker', async () => {
+    const tx = makeCharacteristic();
+    const rx = makeCharacteristic();
+    const device = makeDevice();
+    const service = {
+      getCharacteristic: vi.fn((uuid: string) => {
+        if (uuid === TX_UUID) return Promise.resolve(tx);
+        if (uuid === RX_UUID) return Promise.resolve(rx);
+        return Promise.reject(new Error(`unknown char ${uuid}`));
+      }),
+    };
+    const server = { getPrimaryService: vi.fn(() => Promise.resolve(service)) };
+    device.gatt.connect.mockResolvedValue(server);
+    const requestDevice = vi.fn();
+    vi.stubGlobal('navigator', { bluetooth: { requestDevice } });
+
+    const transport = await WebBluetoothTransport.fromDevice(device as unknown as BluetoothDevice, {
+      serviceUuid: SERVICE_UUID,
+      txCharacteristicUuid: TX_UUID,
+      rxCharacteristicUuid: RX_UUID,
+    });
+    expect(requestDevice).not.toHaveBeenCalled();
+    expect(rx.startNotifications).toHaveBeenCalledOnce();
+    // Sanity-check the wrapped transport reads from the rx characteristic.
+    rx.fireValue([0x42]);
+    const read = await transport.read(1);
+    expect(Array.from(read)).toEqual([0x42]);
+  });
 });
