@@ -119,29 +119,59 @@ export class WebBluetoothTransport implements Transport {
    * is used for both directions (DECISIONS.md D6).
    */
   static async request(config: BluetoothGattTransport): Promise<WebBluetoothTransport> {
-    // Web Bluetooth filters check the device's *advertisement*, not its
-    // GATT table. Some chassis (e.g. Niimbot B1, 2024+ firmware) host
-    // the driver's primary service in GATT but only advertise a generic
-    // BLE-UART service (MCHP 49535343-…) instead. With a service-only
-    // filter the picker would never see them.
-    //
-    // OR-fallback: when `namePrefix` is set, accept name-only matches
-    // alongside the strict name+service match. The service is kept in
-    // `optionalServices` so we can still resolve it post-pair via
-    // `getPrimaryService(config.serviceUuid)`. The filters array is an
-    // OR; the strict filter is listed first so matching devices show
-    // higher in the picker on browsers that preserve filter order.
-    const filters: BluetoothLEScanFilter[] =
-      config.namePrefix === undefined
-        ? [{ services: [config.serviceUuid] }]
-        : [
-            { namePrefix: config.namePrefix, services: [config.serviceUuid] },
-            { namePrefix: config.namePrefix },
-          ];
     const device = await navigator.bluetooth.requestDevice({
-      filters,
+      filters: buildFilters([config]),
       optionalServices: [config.serviceUuid],
     });
+    return WebBluetoothTransport.fromDevice(device, config);
+  }
+
+  /**
+   * Open the picker with a *union* of multiple device configs — used
+   * by transport-agnostic autodetect when the caller hasn't picked a
+   * device key yet. The picker filters in any chassis whose
+   * `namePrefix` / `serviceUuid` matches one of the configs; the
+   * caller then identifies the chosen device (e.g. via
+   * `identifyNiimbot`) before wrapping it in a transport.
+   *
+   * Returns the raw `BluetoothDevice` so the caller can both inspect
+   * `.name` (the advertised name) and pair it with the right config
+   * before calling `fromDevice()`. The GATT connection is not opened
+   * here — that's the next step, gated on which config the autodetect
+   * resolves to.
+   *
+   * `optionalServices` unions every config's service UUID so
+   * `getPrimaryService(...)` works after pairing regardless of which
+   * config the autodetect picks.
+   */
+  static async requestAny(
+    configs: readonly BluetoothGattTransport[],
+  ): Promise<BluetoothDevice> {
+    if (configs.length === 0) {
+      throw new Error('WebBluetoothTransport.requestAny: no configs supplied');
+    }
+    const uniqueServices = Array.from(new Set(configs.map(c => c.serviceUuid)));
+    return navigator.bluetooth.requestDevice({
+      filters: buildFilters(configs),
+      optionalServices: uniqueServices,
+    });
+  }
+
+  /**
+   * Wrap a `BluetoothDevice` that the caller has already paired with
+   * (typically via `requestAny` followed by autodetect). Connects
+   * GATT, resolves TX / RX from the supplied `config`, and starts RX
+   * notifications. Skips re-opening the picker — the device stays
+   * the one the user already chose.
+   *
+   * Idempotent in the sense that `device.gatt.connect()` is a no-op
+   * when the GATT server is already connected; safe to call after
+   * `requestAny` even if the browser eagerly connected.
+   */
+  static async fromDevice(
+    device: BluetoothDevice,
+    config: BluetoothGattTransport,
+  ): Promise<WebBluetoothTransport> {
     if (!device.gatt) throw new Error('Selected Bluetooth device has no GATT server');
     const server = await device.gatt.connect();
     const service = await server.getPrimaryService(config.serviceUuid);
@@ -219,4 +249,39 @@ export class WebBluetoothTransport implements Transport {
     if (waiter.timer) clearTimeout(waiter.timer);
     waiter.resolve(this.drainBuffer(waiter.needed));
   }
+}
+
+/**
+ * Build the browser-picker filter array from one or more
+ * `BluetoothGattTransport` configs.
+ *
+ * Web Bluetooth filters check the device's *advertisement*, not its
+ * GATT table. Some chassis (e.g. Niimbot B1, 2024+ firmware) host
+ * the driver's primary service in GATT but only advertise a generic
+ * BLE-UART service (MCHP 49535343-…) instead. With a service-only
+ * filter the picker would never see them.
+ *
+ * OR-fallback: when `namePrefix` is set on a config, emit both a
+ * strict `{ namePrefix, services }` filter and a name-only one. The
+ * picker treats the filter array as an OR; strict filters come
+ * first so service-advertising chassis rank higher on browsers that
+ * preserve filter order.
+ *
+ * Multi-config callers (`requestAny`) concatenate per-config filters
+ * — the picker shows every chassis matching any of the configs,
+ * which is exactly the discovery surface autodetect wants.
+ */
+function buildFilters(
+  configs: readonly BluetoothGattTransport[],
+): BluetoothLEScanFilter[] {
+  const out: BluetoothLEScanFilter[] = [];
+  for (const config of configs) {
+    if (config.namePrefix === undefined) {
+      out.push({ services: [config.serviceUuid] });
+    } else {
+      out.push({ namePrefix: config.namePrefix, services: [config.serviceUuid] });
+      out.push({ namePrefix: config.namePrefix });
+    }
+  }
+  return out;
 }
