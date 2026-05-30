@@ -147,3 +147,22 @@ accordingly.
 
 **Why:** publishing is an external, hard-to-reverse action affecting the
 public npm registry. See `BLOCKERS.md` for the hand-off.
+
+## D13 — USB enumeration lives behind transport (`enumerateUsbDevices`)
+
+**Extends D1.** The `usb` native addon was supposed to live only behind
+`@thermal-label/transport`, but every USB driver (`brother-ql`,
+`labelwriter`, `labelmanager`) still reached around transport into `usb`
+directly to *list* devices — transport gave a connection (`open`/`read`/
+`write`/`close`) but no way to *enumerate* connections.
+
+**Chose:** add node-only `enumerateUsbDevices(registries)` to `./node`. It
+owns `getDeviceList` + the per-device `open → getStringDescriptor → close`
+serial read, reusing the neutral `matchDevice` for the registry match.
+Drivers drop their direct `usb` dependency and `import 'usb'`; the D1
+invariant is finally true for listing as well as opening.
+
+**Why:** the per-driver scan was byte-duplicated three ways with diverging
+edges (connectionId separator `:` vs `.`, a missing `iSerialNumber` guard,
+an unguarded `device.open()` that aborts the whole scan on one bad unit).
+Lifting it fixes all three once and removes the addon leak.
