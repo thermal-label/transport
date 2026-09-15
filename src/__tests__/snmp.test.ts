@@ -197,6 +197,10 @@ interface AgentOptions {
   mangleId?: boolean;
   /** Send a non-SNMP datagram before the real answer. */
   garbageFirst?: boolean;
+  /** Send a decoy answer from a second socket (wrong source port) before the real one. */
+  decoyFromOtherPort?: boolean;
+  /** Echo the request back (GetRequest PDU, same id) before the real answer. */
+  echoRequestFirst?: boolean;
 }
 
 interface Agent {
@@ -224,6 +228,21 @@ async function startAgent(opts: AgentOptions = {}): Promise<Agent> {
     }
     if (opts.dropOids?.includes(vb.oid)) return;
     if (opts.garbageFirst) sock.send(Buffer.from([0x01, 0x02, 0x03]), rinfo.port, rinfo.address);
+    if (opts.echoRequestFirst) sock.send(msg, rinfo.port, rinfo.address);
+    if (opts.decoyFromOtherPort) {
+      const decoy = createSocket('udp4');
+      agents.push(decoy);
+      decoy.send(
+        encodeSnmpMessage(
+          message({
+            requestId: req.requestId,
+            varbinds: [{ oid: vb.oid, value: str('decoy') }],
+          }),
+        ),
+        rinfo.port,
+        rinfo.address,
+      );
+    }
     const value = table[vb.oid];
     const response: SnmpMessage =
       value === undefined && opts.strictV1
@@ -270,10 +289,9 @@ describe('snmpGet', () => {
     const oids = Object.keys(BENCH_TABLE);
     const result = await snmpGet('127.0.0.1', oids, { port: agent.port, ...FAST });
     expect(result).toEqual(BENCH_TABLE);
-    // one request per OID, request ids 1..n, community forwarded
-    expect(agent.requests.map(r => r.requestId).sort((a, b) => a - b)).toEqual(
-      oids.map((_, i) => i + 1),
-    );
+    // one request per OID, consecutive request ids from a random base, community forwarded
+    const ids = agent.requests.map(r => r.requestId).sort((a, b) => a - b);
+    expect(ids).toEqual(oids.map((_, i) => (ids[0] ?? 0) + i));
     expect(agent.requests.every(r => r.community === 'public')).toBe(true);
   });
 
@@ -351,6 +369,52 @@ describe('snmpGet', () => {
     await expect(
       snmpGet('127.0.0.1', [PRINTER_MIB.hrDeviceDescr], { port: agent.port, ...FAST }),
     ).rejects.toBeInstanceOf(TransportTimeoutError);
+  });
+
+  it('ignores an answer from the wrong source port and takes the real one', async () => {
+    const agent = await startAgent({ decoyFromOtherPort: true });
+    const result = await snmpGet('127.0.0.1', [PRINTER_MIB.hrDeviceDescr], {
+      port: agent.port,
+      ...FAST,
+    });
+    expect(result[PRINTER_MIB.hrDeviceDescr]).toEqual(str(MODEL));
+  });
+
+  it('ignores an echoed GetRequest and takes the GetResponse', async () => {
+    const agent = await startAgent({ echoRequestFirst: true });
+    const result = await snmpGet('127.0.0.1', [PRINTER_MIB.hrDeviceDescr], {
+      port: agent.port,
+      ...FAST,
+    });
+    expect(result[PRINTER_MIB.hrDeviceDescr]).toEqual(str(MODEL));
+  });
+
+  it('uses random 31-bit request ids, consecutive within one call', async () => {
+    const agent = await startAgent();
+    await snmpGet('127.0.0.1', [PRINTER_MIB.hrDeviceDescr, PRINTER_MIB.sysDescr], {
+      port: agent.port,
+      ...FAST,
+    });
+    const ids = agent.requests.map(r => r.requestId);
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).toBeGreaterThan(0);
+    expect(ids[1]).toBe((ids[0] ?? 0) + 1);
+    expect(Math.max(...ids)).toBeLessThan(2 ** 31);
+    const again = await startAgent();
+    await snmpGet('127.0.0.1', [PRINTER_MIB.hrDeviceDescr], { port: again.port, ...FAST });
+    expect(again.requests[0]?.requestId).not.toBe(ids[0]);
+  });
+
+  it('resolves a hostname once and rejects with TransportError when it does not', async () => {
+    const agent = await startAgent();
+    const result = await snmpGet('localhost', [PRINTER_MIB.hrDeviceDescr], {
+      port: agent.port,
+      ...FAST,
+    });
+    expect(result[PRINTER_MIB.hrDeviceDescr]).toEqual(str(MODEL));
+    await expect(
+      snmpGet('no-such-host.invalid', [PRINTER_MIB.hrDeviceDescr], FAST),
+    ).rejects.toBeInstanceOf(TransportError);
   });
 
   it('ignores a non-SNMP datagram and still takes the real answer', async () => {

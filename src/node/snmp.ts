@@ -1,4 +1,6 @@
-import { createSocket } from 'node:dgram';
+import { randomInt } from 'node:crypto';
+import { createSocket, type RemoteInfo } from 'node:dgram';
+import { lookup } from 'node:dns/promises';
 import { networkInterfaces } from 'node:os';
 import { TransportError, TransportTimeoutError } from '@thermal-label/contracts';
 
@@ -307,6 +309,17 @@ function firstValue(message: SnmpMessage): SnmpValue {
   return message.varbinds[0]?.value ?? { type: 'null' };
 }
 
+// Request ids are random so a LAN host cannot forge an answer by
+// guessing the ephemeral port alone. 31-bit keeps them inside SNMP's
+// INTEGER range; the batch needs `count` consecutive ids.
+function randomRequestId(count: number): number {
+  return randomInt(1, 2 ** 31 - count);
+}
+
+function isResponse(message: SnmpMessage, rinfo: RemoteInfo, port: number): boolean {
+  return message.pduType === 'get-response' && rinfo.port === port;
+}
+
 function getRequest(requestId: number, oid: string, community: string): Uint8Array {
   return encodeSnmpMessage({
     community,
@@ -334,13 +347,16 @@ interface PendingGet {
  *
  * One request per OID, all in flight on one socket, matched back by
  * request id: a v1 agent fails a whole multi-varbind PDU when any one
- * OID is absent, per-OID requests keep the others alive. Rejects with
- * `TransportTimeoutError` when *no* OID was answered within the budget
- * (host down, SNMP disabled, wrong community) and with `TransportError`
- * on a socket failure. An OID that individually got no answer while
- * others did is simply absent from the result.
+ * OID is absent, per-OID requests keep the others alive. Only a
+ * GetResponse from the target's address and port with a matching
+ * (random) request id is taken; anything else on the socket is dropped.
+ * Rejects with `TransportTimeoutError` when *no* OID was answered
+ * within the budget (host down, SNMP disabled, wrong community) and
+ * with `TransportError` on a socket failure or when `host` does not
+ * resolve. An OID that individually got no answer while others did is
+ * simply absent from the result.
  */
-export function snmpGet(
+export async function snmpGet(
   host: string,
   oids: readonly string[],
   opts: SnmpOptions = {},
@@ -349,7 +365,17 @@ export function snmpGet(
   const port = opts.port ?? DEFAULT_PORT;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const retries = opts.retries ?? DEFAULT_RETRIES;
-  if (oids.length === 0) return Promise.resolve({});
+  if (oids.length === 0) return {};
+
+  let address: string;
+  try {
+    address = (await lookup(host, { family: 4 })).address;
+  } catch (err) {
+    throw new TransportError(
+      `SNMP host ${host} does not resolve: ${err instanceof Error ? err.message : String(err)}`,
+      TRANSPORT,
+    );
+  }
 
   return new Promise((resolve, reject) => {
     const sock = createSocket('udp4');
@@ -387,7 +413,7 @@ export function snmpGet(
 
     const send = (entry: PendingGet): void => {
       try {
-        sock.send(entry.packet, port, host, err => {
+        sock.send(entry.packet, port, address, err => {
           if (err) sendFailed(err);
         });
       } catch (err) {
@@ -412,13 +438,15 @@ export function snmpGet(
       finish(new TransportError(`SNMP socket error: ${err.message}`, TRANSPORT));
     });
 
-    sock.on('message', msg => {
+    sock.on('message', (msg, rinfo) => {
+      if (rinfo.address !== address) return;
       let decoded: SnmpMessage;
       try {
         decoded = decodeSnmpMessage(msg);
       } catch {
         return;
       }
+      if (!isResponse(decoded, rinfo, port)) return;
       const entry = pending.get(decoded.requestId);
       if (!entry) return;
       clearTimeout(entry.timer);
@@ -428,8 +456,9 @@ export function snmpGet(
       maybeDone();
     });
 
+    const firstId = randomRequestId(oids.length);
     for (const [i, oid] of oids.entries()) {
-      const id = i + 1;
+      const id = firstId + i;
       const entry: PendingGet = {
         oid,
         packet: getRequest(id, oid, community),
@@ -504,7 +533,8 @@ export function snmpBroadcast(
     const seen = new Map<string, SnmpValue>();
     const timers: NodeJS.Timeout[] = [];
     let settled = false;
-    const packet = getRequest(1, oid, community);
+    const requestId = randomRequestId(1);
+    const packet = getRequest(requestId, oid, community);
 
     const finish = (err?: Error): void => {
       if (settled) return;
@@ -542,7 +572,8 @@ export function snmpBroadcast(
       } catch {
         return;
       }
-      if (decoded.requestId !== 1 || seen.has(rinfo.address)) return;
+      if (!isResponse(decoded, rinfo, port) || decoded.requestId !== requestId) return;
+      if (seen.has(rinfo.address)) return;
       seen.set(rinfo.address, firstValue(decoded));
     });
 

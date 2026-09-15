@@ -68,18 +68,23 @@ async function answer(
   value: SnmpValue,
   overrides: Partial<SnmpMessage> = {},
 ): Promise<void> {
+  // let bind() + the first sendAll run before the reply lands
+  await new Promise(resolve => setTimeout(resolve, 5));
   const msg: SnmpMessage = {
     community: 'public',
     pduType: 'get-response',
-    requestId: 1,
+    requestId: sentRequestId(snmp),
     errorStatus: 0,
     errorIndex: 0,
     varbinds: [{ oid: HR_DEVICE_DESCR, value }],
     ...overrides,
   };
-  // let bind() + the first sendAll run before the reply lands
-  await new Promise(resolve => setTimeout(resolve, 5));
   lastSocket?.emit('message', Buffer.from(snmp.encodeSnmpMessage(msg)), { address, port: 161 });
+}
+
+// Request ids are random per call; read the one the broadcast used.
+function sentRequestId(snmp: typeof SnmpModule): number {
+  return snmp.decodeSnmpMessage(lastSocket?.sends[0]?.msg ?? new Uint8Array()).requestId;
 }
 
 const str = (value: string): SnmpValue => ({
@@ -119,7 +124,9 @@ describe('snmpBroadcast', () => {
       '192.168.1.255:161',
     ]);
     const sent = snmp.decodeSnmpMessage(lastSocket?.sends[0]?.msg ?? new Uint8Array());
-    expect(sent).toMatchObject({ community: 'public', pduType: 'get-request', requestId: 1 });
+    expect(sent).toMatchObject({ community: 'public', pduType: 'get-request' });
+    expect(sent.requestId).toBeGreaterThan(0);
+    expect(sent.requestId).toBeLessThan(2 ** 31);
     expect(sent.varbinds).toEqual([{ oid: HR_DEVICE_DESCR, value: { type: 'null' } }]);
     expect(lastSocket?.close).toHaveBeenCalledOnce();
   });
@@ -154,8 +161,23 @@ describe('snmpBroadcast', () => {
     await answer(snmp, '192.168.1.67', str('duplicate from the resend'));
     // v1 agent without the object: errorStatus noSuchName → noSuchObject
     await answer(snmp, '192.168.1.2', { type: 'null' }, { errorStatus: 2, errorIndex: 1 });
-    // wrong request id and garbage: ignored
-    await answer(snmp, '192.168.1.3', str('stale'), { requestId: 99 });
+    // wrong request id, echoed request, wrong source port and garbage: ignored
+    await answer(snmp, '192.168.1.3', str('stale'), { requestId: sentRequestId(snmp) + 1 });
+    await answer(snmp, '192.168.1.3', str('echo'), { pduType: 'get-request' });
+    lastSocket?.emit(
+      'message',
+      Buffer.from(
+        snmp.encodeSnmpMessage({
+          community: 'public',
+          pduType: 'get-response',
+          requestId: sentRequestId(snmp),
+          errorStatus: 0,
+          errorIndex: 0,
+          varbinds: [{ oid: HR_DEVICE_DESCR, value: str('wrong port') }],
+        }),
+      ),
+      { address: '192.168.1.3', port: 1161 },
+    );
     lastSocket?.emit('message', Buffer.from([0x01, 0x02]), { address: '192.168.1.4', port: 161 });
     await expect(pending).resolves.toEqual([
       { address: '192.168.1.67', value: str('Brother QL-820NWB') },
