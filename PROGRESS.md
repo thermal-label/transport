@@ -73,3 +73,14 @@ Tracks completion of the steps in `PLAN.md` §10.
 - [x] All PROGRESS.md checkboxes ticked
 - [ ] Publish to npm (operator — see BLOCKERS.md)
 - [x] Commit + push
+
+## 0.6.1 — enumeration behind transport (plan 15 + plan 17 step 2)
+
+- [x] `enumerateUsbDevices` (DECISIONS D13)
+- [x] `snmpGet` / `snmpBroadcast` / `PRINTER_MIB` (`src/node/snmp.ts`)
+- [x] `matchModelName` (isomorphic, needs contracts ≥ 0.6.2 `modelNames`)
+- [x] `enumerateNetworkDevices` / `identifyNetworkDevice` (DECISIONS D14)
+- [x] Tests: BER round-trips, local `dgram` agent stub, mocked broadcast, mocked discovery
+- [x] Docs: `docs/index.md`, README, typedoc
+- [ ] Pin `@thermal-label/contracts` to `^0.6.2` + lockfile once it is on npm
+- [ ] Publish (after the PR merges)

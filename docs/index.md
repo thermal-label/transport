@@ -30,7 +30,11 @@ Browser-only consumers download neither.
 | `WebUsbTransport` | Browser | `navigator.usb` picker + `USBDevice` wrapper. |
 | `WebSerialTransport` | Browser | `navigator.serial` picker + `SerialPort` wrapper (covers BT SPP + USB-serial). |
 | `WebBluetoothTransport` | Browser | GATT transport for BLE printers (Niimbot, Phomemo, Brother BLE, …). |
+| `enumerateUsbDevices` | Node | List connected USB printers matching one or more registries, serial included. |
+| `enumerateNetworkDevices` / `identifyNetworkDevice` | Node | Find network printers by SNMP broadcast, or ask one host what it is. |
+| `snmpGet` / `snmpBroadcast` | Node | Dependency-free SNMPv1 GET primitives with the `PRINTER_MIB` OID table. |
 | `matchDevice` / `buildUsbFilters` | Both | Helpers for matching and requesting USB devices. |
+| `matchModelName` | Both | Match a self-reported model string (`hrDeviceDescr`, `MDL:`, `usb_MDL`) against `DeviceEntry.modelNames`. |
 | `buildBluetoothRequestOptions` | Both | Build `navigator.bluetooth.requestDevice` options from a `BluetoothConfig`. |
 | `buildSerialRequestOptions` | Both | Build `navigator.serial.requestPort` options. |
 | `discoverAll` | Both | Aggregate `PrinterDiscovery` implementations across drivers. |
@@ -52,7 +56,7 @@ import {
 } from '@thermal-label/transport/web';
 
 // Platform-neutral helpers
-import { matchDevice, buildUsbFilters, discoverAll } from '@thermal-label/transport';
+import { matchDevice, matchModelName, buildUsbFilters, discoverAll } from '@thermal-label/transport';
 ```
 
 The root entry (`@thermal-label/transport`) is safe to import from either
@@ -169,6 +173,34 @@ const transport = await WebBluetoothTransport.request({
 `writeValueWithoutResponse`. `read(n)` buffers incoming
 `characteristicvaluechanged` notifications and resolves once `n` bytes are
 available.
+
+### Enumeration (Node)
+
+```ts
+import { enumerateUsbDevices, enumerateNetworkDevices, identifyNetworkDevice } from '@thermal-label/transport/node';
+import { DEVICES } from '@thermal-label/brother-ql-core';
+
+const usb = await enumerateUsbDevices(Object.values(DEVICES));
+// [{ descriptor, serialNumber?, connectionId: '1:5' }]
+
+const lan = await enumerateNetworkDevices(Object.values(DEVICES), { windowMs: 1000 });
+// [{ descriptor, host: '192.168.1.67', port: 9100, serialNumber?, modelName, connectionId: '192.168.1.67:9100' }]
+
+const one = await identifyNetworkDevice('192.168.1.67', Object.values(DEVICES));
+// undefined → answered, but not in this registry; rejects → could not be asked
+```
+
+Port 9100 on a network label printer is write-only, so the model, serial and
+loaded media come from SNMP (standard Printer-MIB, community `public`). The
+broadcast covers every non-internal IPv4 subnet the host sits on; on another
+subnet, or with SNMP disabled on the printer, `identifyNetworkDevice` still
+works over unicast and drivers fall back to an explicit `deviceKey`. Neither
+helper opens a TCP connection.
+
+`snmpGet(host, oids, opts)` and `snmpBroadcast(oid, opts)` are the primitives
+underneath, exported for drivers that map Printer-MIB status themselves;
+`PRINTER_MIB` names the OIDs (`hrPrinterStatus`, `hrPrinterDetectedErrorState`,
+`prtInputMediaName`, `prtMarkerLifeCount`, …).
 
 ### Discovery aggregation
 

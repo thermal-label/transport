@@ -45,6 +45,7 @@ Full docs at **<https://thermal-label.github.io/transport/>**.
 - Per-transport reference: `UsbTransport`, `TcpTransport`, `SerialTransport`,
   `WebUsbTransport`, `WebSerialTransport`, `WebBluetoothTransport`
 - Subpath imports — keep native USB out of browser bundles
+- `enumerateUsbDevices` / `enumerateNetworkDevices` — list printers by USB or SNMP broadcast
 - `discoverAll` — aggregate `PrinterDiscovery` across drivers
 
 ## Compatibility
