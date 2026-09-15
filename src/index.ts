@@ -7,4 +7,5 @@ export {
   buildUsbFilters,
   discoverAll,
   matchDevice,
+  matchModelName,
 } from './discovery.js';

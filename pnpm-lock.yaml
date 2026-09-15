@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@thermal-label/contracts':
-        specifier: ^0.6.0
-        version: 0.6.0
+        specifier: ^0.6.2
+        version: 0.6.2
     devDependencies:
       '@mbtech-nl/eslint-config':
         specifier: ^1.1.0
@@ -558,8 +558,8 @@ packages:
   '@shikijs/vscode-textmate@10.0.2':
     resolution: {integrity: sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg==}
 
-  '@thermal-label/contracts@0.6.0':
-    resolution: {integrity: sha512-ci8GRSbTDw/f3xdR8/cRWmgn0Br4gwSHSEYHkNg3Q5Xr/LKKc7au7UIqZPClGPoSBDHf1mslPul+PeBzjfx0wA==}
+  '@thermal-label/contracts@0.6.2':
+    resolution: {integrity: sha512-KAFR/+kUIvM3nKt3RWa3gwaJDXGOAAg+eXz+n86ZlvlBV782WMfOj7SpUgQqdBh5OYNP0LMLDHk0OxiqSMx+NA==}
     engines: {node: '>=20.9.0'}
 
   '@tybys/wasm-util@0.10.1':
@@ -2117,7 +2117,7 @@ snapshots:
 
   '@shikijs/vscode-textmate@10.0.2': {}
 
-  '@thermal-label/contracts@0.6.0':
+  '@thermal-label/contracts@0.6.2':
     dependencies:
       '@mbtech-nl/bitmap': 1.3.0
 
