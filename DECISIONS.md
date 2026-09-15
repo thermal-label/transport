@@ -166,3 +166,28 @@ invariant is finally true for listing as well as opening.
 edges (connectionId separator `:` vs `.`, a missing `iSerialNumber` guard,
 an unguarded `device.open()` that aborts the whole scan on one bad unit).
 Lifting it fixes all three once and removes the addon leak.
+
+## D14 — Network enumeration lives behind transport too (`enumerateNetworkDevices`, `identifyNetworkDevice`, `snmpGet`, `snmpBroadcast`)
+
+**Extends D13.** Port 9100 on a network label printer is write-only
+(plan 17, measured on a QL-820NWBc): nothing sent to it identifies the
+model or the loaded media. The model, serial, state and media are all
+answerable over SNMP with standard Printer-MIB / Host-Resources-MIB
+objects, and every printer on a subnet answers one broadcast GET.
+
+**Chose:** a dependency-free SNMPv1 GET + broadcast pair on `node:dgram`
+under `./node`, plus `enumerateNetworkDevices(registries)` /
+`identifyNetworkDevice(host, registries)` mirroring the USB enumerator,
+and an isomorphic `matchModelName` next to `matchDevice` that matches
+the reported model string against `DeviceEntry.modelNames`
+(contracts 0.6.2). `identify` resolves `undefined` for "answered, not in
+this registry" and rejects for "could not ask", so a driver can tell
+"not mine" from "SNMP is off". Neither helper opens a TCP connection.
+
+**Why:** each network-capable driver would otherwise grow its own SNMP
+client and its own model-string matcher; the fault line is the same one
+D13 drew for USB. SNMP over IPP/mDNS because it needs no parser beyond
+BER, works on every Brother print server back to the QL-580N, and is
+what the vendor's own tools use. Timeouts report as `TransportTimeoutError`
+tagged `'tcp'`: the contracts union has no UDP member and SNMP is the
+side channel of the TCP printers.
