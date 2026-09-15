@@ -193,9 +193,11 @@ const one = await identifyNetworkDevice('192.168.1.67', Object.values(DEVICES));
 Port 9100 on a network label printer is write-only, so the model, serial and
 loaded media come from SNMP (standard Printer-MIB, community `public`). The
 broadcast covers every non-internal IPv4 subnet the host sits on; on another
-subnet, or with SNMP disabled on the printer, `identifyNetworkDevice` still
-works over unicast and drivers fall back to an explicit `deviceKey`. Neither
-helper opens a TCP connection.
+subnet `identifyNetworkDevice` still works over unicast. With SNMP disabled on
+the printer (or a non-default community) it rejects, and drivers fall back to
+an explicit `deviceKey`. Neither helper opens a TCP connection, and `snmpGet`
+only accepts a GetResponse from the target's own address and port with the
+request id it sent. Answers from anything else on the LAN are dropped.
 
 `snmpGet(host, oids, opts)` and `snmpBroadcast(oid, opts)` are the primitives
 underneath, exported for drivers that map Printer-MIB status themselves;
