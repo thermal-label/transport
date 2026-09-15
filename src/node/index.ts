@@ -4,3 +4,11 @@ export { TcpTransport } from './tcp.js';
 export { SerialTransport } from './serial.js';
 export { enumerateUsbDevices } from './discovery.js';
 export type { EnumeratedUsbDevice } from './discovery.js';
+export {
+  snmpGet,
+  snmpBroadcast,
+  PRINTER_MIB,
+  encodeSnmpMessage,
+  decodeSnmpMessage,
+} from './snmp.js';
+export type { SnmpOptions, SnmpValue, SnmpMessage, SnmpVarbind } from './snmp.js';
