@@ -69,7 +69,7 @@
   },
   "prettier": "@mbtech-nl/prettier-config",
   "dependencies": {
-    "@thermal-label/contracts": "^0.6.0"
+    "@thermal-label/contracts": "^0.6.2"
   },
   "peerDependencies": {
     "serialport": ">=12.0.0",
