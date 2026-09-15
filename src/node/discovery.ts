@@ -131,13 +131,14 @@ function matchTcp(modelName: string, candidates: readonly TcpEntry[]): TcpEntry 
  * Ask one host over SNMP what it is and match the answer against the
  * TCP-capable entries of the given registries.
  *
- * Model comes from `hrDeviceDescr.1`, falling back to `sysDescr.0` when
- * the agent does not carry it (other vendors order `hrDeviceTable`
- * differently). Resolves `undefined` when the host answered but is not
- * in these registries ("not mine"); rejects (`TransportTimeoutError` /
- * `TransportError`) when it could not be asked at all (host down, SNMP
- * disabled, wrong community), so drivers can tell the two apart. Never
- * opens a TCP connection.
+ * One GET fetches `hrDeviceDescr.1`, `sysDescr.0` and the serial.
+ * `hrDeviceDescr.1` is matched first; `sysDescr.0` whenever that is
+ * absent *or* matches nothing (other vendors list an interface, not the
+ * printer, at `hrDeviceIndex` 1). Resolves `undefined` when the host
+ * answered but is not in these registries ("not mine"); rejects
+ * (`TransportTimeoutError` / `TransportError`) when it could not be
+ * asked at all (host down, SNMP disabled, wrong community), so drivers
+ * can tell the two apart. Never opens a TCP connection.
  */
 export async function identifyNetworkDevice(
   host: string,
@@ -149,17 +150,20 @@ export async function identifyNetworkDevice(
     [PRINTER_MIB.hrDeviceDescr, PRINTER_MIB.sysDescr, PRINTER_MIB.prtGeneralSerialNumber],
     opts,
   );
-  const modelName =
-    asString(answers[PRINTER_MIB.hrDeviceDescr]) ?? asString(answers[PRINTER_MIB.sysDescr]);
-  if (modelName === undefined) return undefined;
-  const descriptor = matchTcp(modelName, tcpCapable(registries));
-  if (descriptor === undefined) return undefined;
-  return networkDevice(
-    descriptor,
-    host,
-    modelName,
-    asString(answers[PRINTER_MIB.prtGeneralSerialNumber]),
-  );
+  const candidates = tcpCapable(registries);
+  for (const oid of [PRINTER_MIB.hrDeviceDescr, PRINTER_MIB.sysDescr]) {
+    const modelName = asString(answers[oid]);
+    if (modelName === undefined) continue;
+    const descriptor = matchTcp(modelName, candidates);
+    if (descriptor === undefined) continue;
+    return networkDevice(
+      descriptor,
+      host,
+      modelName,
+      asString(answers[PRINTER_MIB.prtGeneralSerialNumber]),
+    );
+  }
+  return undefined;
 }
 
 async function fetchSerial(host: string, opts: SnmpOptions): Promise<string | undefined> {
@@ -175,8 +179,8 @@ async function fetchSerial(host: string, opts: SnmpOptions): Promise<string | un
  * Find network printers on the local subnets: one SNMP broadcast of
  * `hrDeviceDescr.1`, every responder matched against the TCP-capable
  * entries of the given registries, then one unicast for the serial.
- * Responders without `hrDeviceDescr.1` go through
- * {@link identifyNetworkDevice} for the `sysDescr` fallback.
+ * Responders whose `hrDeviceDescr.1` is absent or matches nothing go
+ * through {@link identifyNetworkDevice} for the `sysDescr` fallback.
  *
  * Best-effort like {@link enumerateUsbDevices}: a responder that stops
  * answering mid-scan is dropped (or listed without a serial), never
@@ -193,9 +197,10 @@ export async function enumerateNetworkDevices(
   const settled = await Promise.allSettled(
     responders.map(async ({ address, value }) => {
       const modelName = asString(value);
-      if (modelName === undefined) return identifyNetworkDevice(address, candidates, opts);
-      const descriptor = matchTcp(modelName, candidates);
-      if (descriptor === undefined) return;
+      const descriptor = modelName === undefined ? undefined : matchTcp(modelName, candidates);
+      if (modelName === undefined || descriptor === undefined) {
+        return identifyNetworkDevice(address, candidates, opts);
+      }
       return networkDevice(descriptor, address, modelName, await fetchSerial(address, opts));
     }),
   );
