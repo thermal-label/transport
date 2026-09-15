@@ -11,6 +11,7 @@ import {
   buildUsbFilters,
   discoverAll,
   matchDevice,
+  matchModelName,
 } from '../discovery.js';
 
 const engine = { role: 'primary', protocol: 'test', dpi: 300, headDots: 672 } as const;
@@ -59,6 +60,54 @@ describe('matchDevice', () => {
 
   it('skips entries without a usb transport', () => {
     expect(matchDevice(0x04f9, 0x209d, [networkOnly])).toBeUndefined();
+  });
+});
+
+describe('matchModelName', () => {
+  const ql820c: DeviceEntry = {
+    ...brotherQL,
+    key: 'QL_820NWBc',
+    name: 'QL-820NWBc',
+    modelNames: ['QL-820NWB', 'QL-820NWBc'],
+  };
+  const ql800: DeviceEntry = { ...brotherQL, key: 'QL_800', name: 'QL-800' };
+  const ql8000: DeviceEntry = { ...brotherQL, key: 'QL_8000', name: 'QL-8000' };
+  const lw550: DeviceEntry = { ...labelwriter, name: 'LabelWriter 550' };
+  const lw550turbo: DeviceEntry = {
+    ...labelwriter,
+    key: 'LW_550_TURBO',
+    name: 'LabelWriter 550 Turbo',
+  };
+  const registry = [ql800, ql8000, ql820c, lw550, lw550turbo];
+
+  it('matches the SNMP hrDeviceDescr with a vendor prefix via modelNames', () => {
+    expect(matchModelName('Brother QL-820NWB', registry)?.key).toBe('QL_820NWBc');
+  });
+
+  it('matches vendor-prefix-free input, case-insensitively, with stray whitespace', () => {
+    expect(matchModelName('ql-820nwb', registry)?.key).toBe('QL_820NWBc');
+    expect(matchModelName('  Brother   QL-820NWBc ', registry)?.key).toBe('QL_820NWBc');
+  });
+
+  it('matches whole tokens only: QL-800 is not QL-8000 and vice versa', () => {
+    expect(matchModelName('Brother QL-800', registry)?.key).toBe('QL_800');
+    expect(matchModelName('Brother QL-8000', registry)?.key).toBe('QL_8000');
+  });
+
+  it('prefers the longest candidate when several appear', () => {
+    expect(matchModelName('DYMO LabelWriter 550 Turbo', registry)?.key).toBe('LW_550_TURBO');
+    expect(matchModelName('DYMO LabelWriter 550', registry)?.key).toBe('LW_550');
+  });
+
+  it('falls back to `name` when modelNames is absent', () => {
+    expect(matchModelName('Brother QL-820NWB', [brotherQL])?.key).toBe('QL_820NWB');
+  });
+
+  it('returns undefined for no match, empty input, or an empty registry', () => {
+    expect(matchModelName('HP LaserJet 4', registry)).toBeUndefined();
+    expect(matchModelName('', registry)).toBeUndefined();
+    expect(matchModelName('Brother QL-800', [])).toBeUndefined();
+    expect(matchModelName('QL-800', [{ ...ql800, modelNames: [''] }])).toBeUndefined();
   });
 });
 

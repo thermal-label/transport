@@ -24,6 +24,52 @@ export function matchDevice(
   });
 }
 
+function modelTokens(s: string): string[] {
+  return s
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(t => t.length > 0);
+}
+
+function containsSequence(haystack: readonly string[], needle: readonly string[]): boolean {
+  for (let i = 0; i + needle.length <= haystack.length; i++) {
+    if (needle.every((token, j) => haystack[i + j] === token)) return true;
+  }
+  return false;
+}
+
+/**
+ * Match a model string a device reports about itself — SNMP
+ * `hrDeviceDescr` / `sysDescr`, IEEE-1284 `MDL:`, mDNS TXT `usb_MDL`,
+ * IPP `printer-device-id` — against the registries' `modelNames`
+ * (default `[name]`).
+ *
+ * Case-folded, whitespace-collapsed, whole-token: a candidate matches
+ * when its tokens appear contiguously in the reported tokens, so a
+ * vendor word in front (`Brother QL-820NWB`) is ignored and `QL-800`
+ * never matches a `QL-8000`. The longest matching candidate wins; ties
+ * go to registry order.
+ */
+export function matchModelName(
+  reported: string,
+  registries: readonly DeviceEntry[],
+): DeviceEntry | undefined {
+  const reportedTokens = modelTokens(reported);
+  if (reportedTokens.length === 0) return undefined;
+  let best: { entry: DeviceEntry; length: number } | undefined;
+  for (const entry of registries) {
+    for (const candidate of entry.modelNames ?? [entry.name]) {
+      const candidateTokens = modelTokens(candidate);
+      if (candidateTokens.length === 0 || !containsSequence(reportedTokens, candidateTokens)) {
+        continue;
+      }
+      const length = candidateTokens.join(' ').length;
+      if (best === undefined || length > best.length) best = { entry, length };
+    }
+  }
+  return best?.entry;
+}
+
 /**
  * Build WebUSB filters from one or more device registries.
  *
